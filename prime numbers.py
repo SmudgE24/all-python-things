@@ -14,7 +14,7 @@ def isPrimeNumber(n1):
     return count
     
     
-n1 = -10000
+n1 = 0
 prime_no_list = [] # type: List[int]
 target = 1000000
 
