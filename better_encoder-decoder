@@ -1,0 +1,103 @@
+import random
+import sys
+
+LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ' ', '.', ',', '\'', '-', '=', '[', ']', '\\', '/', '`', '§', ';']
+global LETTERS
+
+def terminate():
+    print('sumfing is broke, turning offffff.....')
+    sys.exit()
+
+def randomAlpha(seed):
+    alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ' ', '.', ',', '\'', '-', '=', '[', ']', '\\', '/', '`', '§', ';']
+    newalpha = []
+    random.seed(seed)
+    tries = len(alphabet)
+    i = 0
+    for i in range(len(alphabet)):
+        a = random.randint(0, len(alphabet)-1)
+        letter = alphabet[a]
+        newalpha.append(letter)
+        alphabet.remove(letter)
+        tries = tries - 1
+    if len(alphabet) > 0:
+        terminate()
+    return newalpha
+
+def encodeFunc(scrambled_alpha, message, i):
+    letter = message[i]
+    index = LETTERS.index(letter)
+    encodedLetter = scrambled_alpha[index]
+    return encodedLetter
+
+def decode(scrambled_alpha, message, i):
+    letter = message[i]
+    index = scrambled_alpha.index(letter)
+    decodedLetter = LETTERS[index]
+    return decodedLetter
+
+notDone = True
+while notDone:
+    EncodeOrDeCodeStr = input('Would you like to Encode or Decode?')
+    alist = list(EncodeOrDeCodeStr)
+    if alist[0] == 'e' or alist[0] == 'E':
+        encode = True
+        notDone = False
+    elif alist[0] == 'd' or alist[0] == 'D':
+        encode = False
+        notDone = False
+    else:
+        notDone = True
+    
+
+notDone = True
+while notDone:
+    SeedToStartStr = input('What is your start seed?')
+    try:
+        SeedToStart = int(SeedToStartStr)
+    except:
+        notDone = True
+    else:
+        notDone = False
+
+notDone = True
+while notDone:
+    OutOfStr = input('What is your out of number?')
+    try:
+        OutOf = int(OutOfStr)
+    except:
+        notDone = True
+    else:
+        notDone = False
+
+
+if encode:
+    message = input('What message would you like to encode?')
+else:
+    message = input('What message would you like to decode?')
+
+#doo_daa_seed
+seeds = []
+random.seed(SeedToStart)
+i = 0
+for i in range (len(message)):
+    aseed = random.randint(0, OutOf)
+    seeds.append(aseed)
+
+i = 0
+for i in range(len(message)):
+    seed = seeds[i]
+    scrambled_alpha = randomAlpha(seed)
+    if encode:
+        aletter = encodeFunc(scrambled_alpha, message, i)
+    else:
+        aletter = decode(scrambled_alpha, message, i)
+    if i == 0:
+        rebuild = aletter
+    else:
+        rebuild = rebuild + aletter
+
+if encode:
+    print(f'Your encoded message is {rebuild}')
+else:
+    print(f'Your decoded message is {rebuild}')
