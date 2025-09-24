@@ -1,0 +1,49 @@
+from sys import exit
+#setup
+print('for input, you have to enter one of these numbers, they correspond to the tic tac toe board like this.')
+print('1 2 3')
+print('4 5 6')
+print('7 8 9')
+
+
+def getboard(listofmoves, playerinfo):
+	i = 0
+    listofplaces = ['-', '-', '-', '-', '-', '-', '-', '-', '-']
+    playerXorO = playerinfo[0]
+    playerstartfirst = playerinfo[1]
+    XorO = 'X'
+    for i in range(len(listofmoves)):
+        n = listofmoves[i]
+	    listofplaces[n - 1] = XorO
+ 	    if XorO == 'O':
+       		XorO = 'X'
+        else:
+        	XorO = 'O'
+
+    #resetting player start first to original state
+    playerstartfirst = playerinfo[1]
+    
+    print(listofplaces[0], listofplaces[1], listofplaces[2])
+    print(listofplaces[3], listofplaces[4], listofplaces[5])
+    print(listofplaces[6], listofplaces[7], listofplaces[8])
+    return listofplaces
+
+
+def gameinput(listofmoves):
+    #keepgoing = True
+    #while keepgoing:
+    noForInput = input('please enter the input number of where you would like your piece to be placed')
+        #i = 0
+        #for i in range(len(listofmoves)):
+            #if noForinput == listofmoves[i]:
+                #keepgoing = True
+            #else:
+                #keepgoing = False
+    i = 0
+    for i in range(len(listofmoves)):
+        if int(noForInput) == listofmoves[i]:
+            print()
+            print()
+            print('Please only submit a number you haven\'t already.')
+            exit()
+    return int(noForInput)
