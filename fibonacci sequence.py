@@ -1,14 +1,12 @@
-qww=0
 a = 0
 print (a)
 b = 1
 print (b)
 c = (a + b)
 print (c)
-a=qww
-b=a
-c=b
-d=(a+b)
 
-while c < (1):
+for i in range(10):
+    a=b
+    b=c
+    c=(a+b)
     print (c)
