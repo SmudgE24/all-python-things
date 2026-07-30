@@ -16,7 +16,7 @@ def draw_and_click_button(screen, x, y, w, h, text, color, mouse_click=None):
         return False
 
 def draw_line(screen, color:tuple, point_1:tuple, point_2:tuple, width:int):
-    pygame.draw.line(screen, (0, 0, 255), point_1, point_2, width)
+    pygame.draw.line(screen, color, point_1, point_2, width)
 
 def text_blit(screen, color:tuple, size, text:str, x, y):
     font = pygame.font.SysFont(None, size)

@@ -9,6 +9,7 @@ Created on Mon Jul 27 16:29:11 2026
 """
 
 import pygame
+import os
 
 
 # ---------------------------------------
@@ -127,7 +128,10 @@ def start(lines):
     font = pygame.font.SysFont("couriernew", 28)
 
     # Load original background image
-    opening_original = pygame.image.load("opening.jpeg").convert()
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    opening_path = os.path.join(BASE_DIR, "opening.jpeg")
+
+    opening_original = pygame.image.load(opening_path).convert()    
 
     line_index = 0
     current_line = lines[0]

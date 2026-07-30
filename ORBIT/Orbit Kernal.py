@@ -16,8 +16,9 @@ print("TEST")
 #Start up
 try:
     screen = Orbit_open.start(Orbit_open.lines)
-except:
-    Errors.Error("Opening Error", "1")
+except Exception as e:
+    print(f"Opening Error: {e}")
+    Errors.Error(str(e), "1")
 
 running = True
 mouse_click = (0, 0)
