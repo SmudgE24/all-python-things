@@ -9,11 +9,18 @@ import pygame
 import Player
 import Board
 import sys
+import os
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 with open('assets/levels/level1.txt', 'r') as file:
     level = [list(line.rstrip('\r\n')) for line in file]
 
 #Window = 1280 × 720
+
+global BASE_DIR
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def start():
     icon = pygame.image.load("assets/images/Cover.png")
@@ -238,11 +245,13 @@ def run(level):
 levelNo = 1
 while True:
     num = str(levelNo)
-    with open(f'assets/levels/level{num}.txt', 'r') as file:
+    
+    with open(
+        os.path.join(BASE_DIR, 'assets', 'levels', f'level{levelNo}.txt'),
+        'r'
+    ) as file:
         level = [list(line.rstrip('\r\n')) for line in file]
     if run(level):
         levelNo += 1
     else:
         levelNo = 1
-a = Board.board([])
-a.find_chest_contents()

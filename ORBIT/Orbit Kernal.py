@@ -10,28 +10,65 @@ import pygame
 import Orbit_open
 import Errors
 import main_menues
+import OrbitTerminal
 
 print("TEST")
 
-#Start up
+# ============================================================
+# START UP
+# ============================================================
+
 try:
-    screen = Orbit_open.start(Orbit_open.lines)
+    screen = Orbit_open.start(
+        Orbit_open.lines
+    )
+
 except Exception as e:
-    print(f"Opening Error: {e}")
-    Errors.Error(str(e), "1")
+
+    print(
+        f"Opening Error: {e}"
+    )
+
+    Errors.Error(
+        str(e),
+        "1"
+    )
+
+# ============================================================
+# MAIN LOOP
+# ============================================================
 
 running = True
 mouse_click = (0, 0)
+
 while running:
-    #Get events
+
     events = pygame.event.get()
-    
+
     for event in events:
+
         if event.type == pygame.QUIT:
             running = False
+
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouse_click = event.pos
-    
-    main_menues.main_menue(screen, events, mouse_click)
-    
-    pygame.display.flip()  
+
+    output = main_menues.main_menue(
+        screen,
+        events,
+        mouse_click
+    )
+
+    # ========================================================
+    # TERMINAL
+    # ========================================================
+
+    if output == "terminal_launch":
+
+        OrbitTerminal.ALL_POWERFUL()
+
+        output = "none"
+
+    pygame.display.flip()
+
+pygame.quit()
