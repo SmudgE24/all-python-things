@@ -12,6 +12,7 @@ import subprocess
 import re
 
 def main_menue(screen, events, mouse_click=None):
+    screen.fill((0, 0, 0))
     battery = subprocess.run(
     ["pmset", "-g", "batt"],
     capture_output=True,
@@ -38,8 +39,20 @@ def main_menue(screen, events, mouse_click=None):
 
     terminalClick = drawing.draw_and_click_button(screen, 300, 300, "Terminal", 79, (255, 255, 255), (0, 75, 25), mouse_click)
 
+    sentinelClick = drawing.draw_and_click_button(screen, 800, 300, "Sentinel", 79, (255, 255, 255), (0, 75, 25), mouse_click)
+
+    transferClick = drawing.draw_and_click_button(screen, 300, 450, "Transfer", 79, (255, 255, 255), (0, 75, 25), mouse_click)
+
+    schedulerClick = drawing.draw_and_click_button(screen, 800, 450, "Schedulerr", 79, (255, 255, 255), (0, 75, 25), mouse_click)
+
     if terminalClick:
         return "terminal_launch"
+    elif sentinelClick:
+        return "sentinel_launch"
+    elif transferClick:
+        return "transfer_launch"
+    elif schedulerClick:
+        return "scheduler_launch"
 
     return "none"
 

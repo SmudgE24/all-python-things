@@ -11,6 +11,10 @@ import Orbit_open
 import Errors
 import main_menues
 import OrbitTerminal
+import OrbitLoad
+import OrbitSentinel
+import OrbitTransferUI
+import OrbitScheduler
 
 print("TEST")
 
@@ -39,10 +43,10 @@ except Exception as e:
 # ============================================================
 
 running = True
-mouse_click = (0, 0)
+mouse_click = (-10000, -10000)
 
 while running:
-
+    mouse_click = (-10000, -10000)
     events = pygame.event.get()
 
     for event in events:
@@ -65,10 +69,46 @@ while running:
 
     if output == "terminal_launch":
 
+        OrbitLoad.run()
+
         OrbitTerminal.ALL_POWERFUL()
 
         output = "none"
 
+        OrbitLoad.run()
+    
+    elif output == "sentinel_launch":
+
+        OrbitLoad.run()
+        
+        OrbitSentinel.ALL_POWERFULL()
+
+        output = "none"
+    
+        OrbitLoad.run()
+
+    elif output == "transfer_launch":
+
+        OrbitLoad.run()
+
+        a = OrbitTransferUI.OrbitTransferUI()
+
+        a.run()
+
+        output = "none"
+
+        OrbitLoad.run()
+
+    elif output == "scheduler_launch":
+    
+            OrbitLoad.run()
+    
+            a = OrbitScheduler.open_ui()
+    
+            output = "none"
+    
+            OrbitLoad.run()
+    
     pygame.display.flip()
 
 pygame.quit()

@@ -4,6 +4,17 @@ import random
 import time
 import re
 import OrbitCalc
+from datetime import datetime
+import OrbitSentinel
+import OrbitLoad
+import OrbitFile
+
+def OpenSentinel(string):
+    OrbitLoad.run()
+            
+    OrbitSentinel.ALL_POWERFULL()
+        
+    OrbitLoad.run()
 
 def ALL_POWERFUL():
     # ============================================================
@@ -51,6 +62,10 @@ def ALL_POWERFUL():
     #
     # can produce one of several random responses.
     #
+    # ============================================================
+
+    # ============================================================
+    # ORBIT COMMAND DATABASE
     # ============================================================
 
     COMMANDS = {
@@ -274,13 +289,520 @@ def ALL_POWERFUL():
                 "what time is it",
                 "what is the time",
                 "current time",
+                "tell me the time",
+                "time"
+            ],
+
+            "responses": [
+                "The current time is " + datetime.now().strftime("%H:%M:%S")
+            ]
+        },
+
+
+        # ========================================================
+        # DATE
+        # ========================================================
+
+        "date_question": {
+
+            "triggers": [
+                "what date is it",
+                "what is the date",
+                "current date",
+                "tell me the date",
+                "date"
+            ],
+
+            "responses": [
+                "Today's date is " + datetime.now().strftime("%A, %d %B %Y")
+            ]
+        },
+
+
+        # ========================================================
+        # THANK YOU
+        # ========================================================
+
+        "thanks": {
+
+            "triggers": [
+                "thanks",
+                "thank you",
+                "thx",
+                "cheers",
+                "thanks orbit"
+            ],
+
+            "responses": [
+                "You're welcome.",
+                "No problem.",
+                "Anytime.",
+                "Glad to help.",
+                "Command completed."
+            ]
+        },
+
+
+        # ========================================================
+        # GOODBYE
+        # ========================================================
+
+        "goodbye": {
+
+            "triggers": [
+                "bye",
+                "goodbye",
+                "see you",
+                "see ya",
+                "goodnight"
+            ],
+
+            "responses": [
+                "Goodbye.",
+                "See you later.",
+                "Orbit will be here.",
+                "Session ending."
+            ]
+        },
+
+
+        # ========================================================
+        # CONFIRMATION
+        # ========================================================
+
+        "confirmation": {
+
+            "triggers": [
+                "okay",
+                "ok",
+                "alright",
+                "got it",
+                "understood"
+            ],
+
+            "responses": [
+                "Acknowledged.",
+                "Understood.",
+                "Confirmed.",
+                "Command acknowledged."
+            ]
+        },
+
+
+        # ========================================================
+        # YES
+        # ========================================================
+
+        "yes": {
+
+            "triggers": [
+                "yes",
+                "yeah",
+                "yep",
+                "yup"
+            ],
+
+            "responses": [
+                "Confirmed.",
+                "Understood.",
+                "Acknowledged."
+            ]
+        },
+
+
+        # ========================================================
+        # NO
+        # ========================================================
+
+        "no": {
+
+            "triggers": [
+                "no",
+                "nope",
+                "nah"
+            ],
+
+            "responses": [
+                "Understood.",
+                "Negative response recorded.",
+                "Acknowledged."
+            ]
+        },
+
+
+        # ========================================================
+        # VERSION
+        # ========================================================
+
+        "version": {
+
+            "triggers": [
+                "version",
+                "what version are you",
+                "orbit version",
+                "what version is orbit"
+            ],
+
+            "responses": [
+                "Orbit version 1.0.",
+                "You are currently running Orbit 1.0.",
+                "Orbit core version 1.0."
+            ]
+        },
+
+
+        # ========================================================
+        # NAME
+        # ========================================================
+
+        "name": {
+
+            "triggers": [
+                "what is your name",
+                "your name",
+                "what are you called",
+                "what should i call you"
+            ],
+
+            "responses": [
+                "My designation is Orbit.",
+                "I am Orbit.",
+                "Orbit."
+            ]
+        },
+
+
+        # ========================================================
+        # READY
+        # ========================================================
+
+        "ready": {
+
+            "triggers": [
+                "are you ready",
+                "ready",
+                "you ready",
+                "is orbit ready"
+            ],
+
+            "responses": [
+                "Ready.",
+                "Standing by.",
+                "All systems ready.",
+                "Orbit is ready."
+            ]
+        },
+
+
+        # ========================================================
+        # SYSTEM HEALTH
+        # ========================================================
+
+        "health": {
+
+            "triggers": [
+                "system health",
+                "health",
+                "how healthy is the system",
+                "is my computer healthy",
+                "orbit health"
+            ],
+
+            "responses": [
+                "System health monitoring is available through OrbitProcess.",
+                "Orbit Health requires a system scan.",
+                "System health module ready.",
+                "Health information can be retrieved from the monitoring system."
+            ]
+        },
+
+
+        # ========================================================
+        # UPTIME
+        # ========================================================
+
+        "uptime": {
+
+            "triggers": [
+                "uptime",
+                "system uptime",
+                "how long has the computer been on",
+                "how long has orbit been running"
+            ],
+
+            "responses": [
+                "Uptime monitoring is available through OrbitProcess.",
+                "System uptime has been requested.",
+                "Orbit can retrieve the current system uptime."
+            ]
+        },
+
+
+        # ========================================================
+        # BATTERY
+        # ========================================================
+
+        "battery": {
+
+            "triggers": [
+                "battery",
+                "battery percentage",
+                "how much battery",
+                "battery level",
+                "battery status"
+            ],
+
+            "responses": [
+                "Battery monitoring is active.",
+                "Battery status has been requested.",
+                "OrbitProcess is monitoring battery information."
+            ]
+        },
+
+
+        # ========================================================
+        # FILES
+        # ========================================================
+
+        "files": {
+
+            "triggers": [
+                "files",
+                "my files",
+                "file manager",
+                "open files",
+                "show files"
+            ],
+
+            "responses": [
+                "OrbitFiles is ready.",
+                "File management module available.",
+                "Opening the Orbit file system."
+            ]
+        },
+
+
+        # ========================================================
+        # CALCULATOR
+        # ========================================================
+
+        "calculator_question": {
+
+            "triggers": [
+                "calculator",
+                "open calculator",
+                "orbit calculator"
+            ],
+
+            "responses": [
+                "OrbitCalc is ready.",
+                "Calculator module available.",
+                "Opening OrbitCalc."
+            ]
+        },
+
+
+        # ========================================================
+        # SENTINEL
+        # ========================================================
+
+        "sentinel_question": {
+
+            "triggers": [
+                "sentinel",
+                "open sentinel",
+                "system monitor",
+                "task manager"
+            ],
+
+            "responses": [
+                "Opening Sentinel.",
+                "Sentinel module ready.",
+                "Launching system monitoring."
+            ]
+        },
+
+
+        # ========================================================
+        # MODULES
+        # ========================================================
+
+        "modules": {
+
+            "triggers": [
+                "modules",
+                "show modules",
+                "list modules",
+                "what modules are loaded",
+                "loaded modules"
+            ],
+
+            "responses": [
+                "Orbit modules can be viewed with /modules.",
+                "Module registry queried.",
+                "Orbit module system is operational."
+            ]
+        },
+
+
+        # ========================================================
+        # PLUGINS
+        # ========================================================
+
+        "plugins": {
+
+            "triggers": [
+                "plugins",
+                "show plugins",
+                "list plugins",
+                "what plugins are installed"
+            ],
+
+            "responses": [
+                "Plugin registry queried.",
+                "OrbitPlugin is ready.",
+                "Plugin information requested."
+            ]
+        },
+
+
+        # ========================================================
+        # LOGS
+        # ========================================================
+
+        "logs": {
+
+            "triggers": [
+                "logs",
+                "system logs",
+                "orbit logs",
+                "show logs",
+                "view logs"
+            ],
+
+            "responses": [
+                "OrbitLog is ready.",
+                "System logs requested.",
+                "Log subsystem queried."
+            ]
+        },
+
+
+        # ========================================================
+        # CONFIGURATION
+        # ========================================================
+
+        "configuration": {
+
+            "triggers": [
+                "config",
+                "configuration",
+                "settings",
+                "orbit settings",
+                "system settings"
+            ],
+
+            "responses": [
+                "OrbitConfig is ready.",
+                "Configuration system available.",
+                "Settings subsystem queried."
+            ]
+        },
+
+
+        # ========================================================
+        # CLEAR
+        # ========================================================
+
+        "clear_question": {
+
+            "triggers": [
+                "clear",
+                "clear screen",
+                "clean screen"
+            ],
+
+            "responses": [
+                "Clearing terminal.",
+                "Terminal clear command received."
+            ]
+        },
+
+
+        # ========================================================
+        # RESTART
+        # ========================================================
+
+        "restart": {
+
+            "triggers": [
+                "restart orbit",
+                "restart",
+                "reboot orbit",
+                "restart system"
+            ],
+
+            "responses": [
+                "Restart command received.",
+                "Preparing Orbit restart.",
+                "Restart request acknowledged."
+            ]
+        },
+
+
+        # ========================================================
+        # SECURITY
+        # ========================================================
+
+        "security": {
+
+            "triggers": [
+                "security",
+                "is orbit secure",
+                "security status",
+                "check security"
+            ],
+
+            "responses": [
+                "Security subsystem available.",
+                "Orbit security status requested.",
+                "Security monitoring is operational."
+            ]
+        },
+
+
+        # ========================================================
+        # TIME
+        # ========================================================
+
+        "time_question": {
+
+            "triggers": [
+                "what time is it",
+                "what is the time",
+                "current time",
                 "tell me the time"
             ],
 
             "responses": [
-                "The current time is being retrieved.",
-                "Checking system time...",
-                "Retrieving current time..."
+                datetime.now().strftime("%H:%M:%S")
+            ]
+        },
+
+        #date
+
+        "date_question": {
+        
+            "triggers": [
+                "what date is it",
+                "what is the date",
+                "current date",
+                "tell me the date"
+                "date"
+            ],
+        
+            "responses": [
+                datetime.now().strftime("%A, %d %B %Y")
             ]
         }
 
@@ -303,8 +825,8 @@ def ALL_POWERFUL():
     #     OrbitCalc.calc("44*99")
     #
     # ============================================================
-
     BASE_QUESTIONS = {
+
 
         # ========================================================
         # CALCULATOR
@@ -319,10 +841,143 @@ def ALL_POWERFUL():
             ],
 
             "function": OrbitCalc.calc
+        },
+
+
+        # ========================================================
+        # SENTINEL
+        # ========================================================
+
+        "sentinel": {
+
+            "triggers": [
+                "sentinel",
+                "system",
+                "task manager",
+                "system monitor",
+                "open sentinel"
+            ],
+
+            "function": OpenSentinel
+        },
+
+
+        # ========================================================
+        # LIST FILES
+        # ========================================================
+
+        "list_files": {
+
+            "triggers": [
+                "ls",
+                "dir",
+                "list",
+                "list files",
+                "show files",
+                "show directory",
+                "list directory",
+                "files"
+            ],
+
+            "function": OrbitFile.list_files
+        },
+
+
+        # ========================================================
+        # CURRENT DIRECTORY
+        # ========================================================
+
+        "current_directory": {
+
+            "triggers": [
+                "pwd",
+                "where am i",
+                "current directory",
+                "current folder",
+                "working directory",
+                "where am i located"
+            ],
+
+            "function": OrbitFile.current_directory
+        },
+
+
+        # ========================================================
+        # CHANGE DIRECTORY
+        # ========================================================
+
+        "change_directory": {
+
+            "triggers": [
+                "cd",
+                "change directory",
+                "change folder",
+                "go to",
+                "enter folder",
+                "open folder"
+            ],
+
+            "function": OrbitFile.change_directory
+        },
+
+
+        # ========================================================
+        # MAKE DIRECTORY
+        # ========================================================
+
+        "make_directory": {
+
+            "triggers": [
+                "mkdir",
+                "make directory",
+                "make folder",
+                "create directory",
+                "create folder",
+                "new folder"
+            ],
+
+            "function": OrbitFile.make_directory
+        },
+
+
+        # ========================================================
+        # CREATE FILE
+        # ========================================================
+
+        "create_file": {
+
+            "triggers": [
+                "touch",
+                "create file",
+                "make file",
+                "new file",
+                "create",
+                "make"
+            ],
+
+            "function": OrbitFile.create_file
+        },
+
+
+        # ========================================================
+        # DELETE
+        # ========================================================
+
+        "delete": {
+
+            "triggers": [
+                "delete",
+                "remove",
+                "rm",
+                "delete file",
+                "remove file",
+                "erase"
+            ],
+
+            "function": OrbitFile.delete
         }
 
     }
-
 
     # ============================================================
     # TERMINAL HISTORY

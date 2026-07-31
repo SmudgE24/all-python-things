@@ -1,4 +1,5 @@
 import math
+import cmath
 
 def calc(string:str):
     string += " "
@@ -103,3 +104,9 @@ def calc(string:str):
         if nums[0] == 0:
             return "Math Error"
         return float(nums[1] ** (1 / nums[0]))
+
+def quadraticSolver(a, b, c):
+    return [
+        (-b + cmath.sqrt(b**2 - 4*a*c)) / (2*a),
+        (-b - cmath.sqrt(b**2 - 4*a*c)) / (2*a)
+    ]
