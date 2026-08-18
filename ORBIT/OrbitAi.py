@@ -1,736 +1,870 @@
-#!/usr/bin/env python3
-"""Orbit AI - local AI assistant with an optional Pygame ch([docs.ollama.com](https://docs.ollama.com/api/chat?utm_source=chatgpt.com))es Ollama for local AI responses, so no OpenAI ([docs.ollama.com](https://docs.ollama.com/api/chat?utm_source=chatgpt.com))
+import ollama
+import pygame
+import threading
+import sys
+import os
+import shutil
+import subprocess
+import time
 
-Modes:
-    python OrbitAI.py
-    python OrbitAI.py --ui
-    python OrbitAI.py --cli
-    python OrbitAI.py --text "Hello"
+# ============================================================
+# ORBIT AI - MODEL CONFIGURATION
+# ============================================================
 
-First-time setup:
-    1. Install Ollama.
-    2. Start Ollama.
-    3. Download a model, for example:
-           ollama pull qwen3:4b
-    4. Run this file.
+FALLBACK_MODEL = "qwen3:0.6b"
+BIG_MODEL = "qwen3-coder"
 
-Ollama normally listens on:
-    http://localhost:11434
-"""
-
-from __future__ import annotations
-
-import argparse
-import json
-import re
-import urllib.error
-import urllib.request
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Literal
-
-ProviderName = Literal["offline", "ollama"]
+DRIVE_PATH = "/Volumes/ETHANS 1TB"
+DRIVE_MODEL_PATH = "/Volumes/ETHANS 1TB/OllamaModels"
 
 
-class AIProviderError(RuntimeError):
-    """Raised when the configured local AI provider cannot answer."""
+def drive_connected():
+    return os.path.isdir(DRIVE_PATH)
 
 
-@dataclass
-class ChatMessage:
-    """One message in a conversation."""
+def get_model():
+    """
+    Choose the best available model.
 
-    role: Literal["user", "assistant"]
-    content: str
-    timestamp: datetime = field(default_factory=datetime.now)
+    If the removable drive is connected:
+        qwen3-coder
 
-
-class AIEngine:
-    """Reusable text-based assistant.
-
-    The default provider is Ollama, which runs the model locally on your Mac.
+    Otherwise:
+        qwen3:0.6b
     """
 
-    def __init__(
-        self,
-        provider: ProviderName = "ollama",
-        model: str = "qwen3:4b",
-        base_url: str = "http://localhost:11434",
-        system_prompt: str = (
-            "You are Orbit AI, a helpful and friendly assistant inside the Orbit "
-            "operating environment. Give useful answers, explain things clearly, "
-            "and keep responses reasonably concise unless the user asks for detail."
-        ),
-        max_history_turns: int = 8,
-    ) -> None:
-        if provider not in ("offline", "ollama"):
-            raise ValueError("provider must be either 'offline' or 'ollama'.")
-        if max_history_turns < 0:
-            raise ValueError("max_history_turns must be zero or greater.")
+    if drive_connected():
+        return BIG_MODEL
 
-        self.provider = provider
-        self.model = model
-        self.base_url = base_url.rstrip("/")
-        self.system_prompt = system_prompt
-        self.max_history_turns = max_history_turns
-        self.history: list[ChatMessage] = []
+    return FALLBACK_MODEL
 
-    def clear_history(self) -> None:
-        """Remove all remembered user and assistant messages."""
-        self.history.clear()
 
-    def respond(self, text: str) -> str:
-        """Return an assistant response for a single input string."""
-        if not isinstance(text, str):
-            raise TypeError("text must be a string.")
+CURRENT_MODEL = get_model()
 
-        prompt = text.strip()
-        if not prompt:
-            return "Please enter a message so I can respond."
 
-        self.history.append(ChatMessage("user", prompt))
+# ============================================================
+# AI
+# ============================================================
 
-        if self.provider == "ollama":
-            answer = self._ollama_response()
-        else:
-            answer = self._offline_response(prompt)
+def get_ai_response(messages):
+    global CURRENT_MODEL
 
-        answer = answer.strip() or "I could not generate a response."
-        self.history.append(ChatMessage("assistant", answer))
-        self._trim_history()
-        return answer
+    try:
+        CURRENT_MODEL = get_model()
 
-    def _trim_history(self) -> None:
-        """Limit stored context to the configured number of complete turns."""
-        limit = self.max_history_turns * 2
-        if limit == 0:
-            self.history.clear()
-        elif len(self.history) > limit:
-            self.history[:] = self.history[-limit:]
-
-    def _ollama_response(self) -> str:
-        """Call Ollama's local /api/chat endpoint."""
-        endpoint = f"{self.base_url}/api/chat"
-
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": self.system_prompt}
-        ]
-        messages.extend(
-            {"role": item.role, "content": item.content}
-            for item in self.history
+        response = ollama.chat(
+            model=CURRENT_MODEL,
+            messages=messages
         )
 
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-        }
+        return response["message"]["content"]
 
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "OrbitAI/1.0",
-            },
-            method="POST",
-        )
-
-        try:
-            with urllib.request.urlopen(request, timeout=300) as response:
-                raw = response.read().decode("utf-8")
-                data = json.loads(raw)
-        except urllib.error.HTTPError as error:
-            try:
-                details = error.read().decode("utf-8", errors="replace")
-                parsed = json.loads(details)
-                message = parsed.get("error", details)
-            except Exception:
-                message = error.reason
-            raise AIProviderError(
-                f"Ollama returned HTTP {error.code}: {message}"
-            ) from error
-        except urllib.error.URLError as error:
-            raise AIProviderError(
-                "Could not connect to Ollama. Make sure Ollama is installed "
-                "and running, then try again."
-            ) from error
-        except json.JSONDecodeError as error:
-            raise AIProviderError(
-                "Ollama returned invalid JSON."
-            ) from error
-
-        try:
-            content = data["message"]["content"]
-        except (KeyError, TypeError) as error:
-            if "error" in data:
-                raise AIProviderError(str(data["error"])) from error
-            raise AIProviderError(
-                "Ollama returned an unexpected response format."
-            ) from error
-
-        if not isinstance(content, str):
-            raise AIProviderError("Ollama did not return text content.")
-
-        return content
-
-    def _offline_response(self, prompt: str) -> str:
-        """Small dependency-free fallback."""
-        lowered = prompt.casefold()
-
-        if re.search(r"\b(hello|hi|hey|greetings)\b", lowered):
-            return "Hello! Orbit AI is running in offline demo mode."
-
-        if "what can you do" in lowered or lowered == "help":
-            return (
-                "I can chat, remember recent messages, answer questions, "
-                "and run inside Orbit's Pygame interface."
-            )
-
-        if "time" in lowered and ("what" in lowered or "current" in lowered):
-            return (
-                "The local time is "
-                f"{datetime.now().strftime('%H:%M on %A, %B %d, %Y')}."
-            )
-
-        if re.search(r"\b(bye|goodbye|exit|quit)\b", lowered):
-            return "Goodbye."
-
-        calculation = self._try_safe_arithmetic(prompt)
-        if calculation is not None:
-            return f"The result is {calculation}."
-
-        concise = " ".join(prompt.split())
-        return f'Offline Orbit AI received: "{concise[:280]}"'
-
-    @staticmethod
-    def _try_safe_arithmetic(text: str) -> str | None:
-        """Evaluate a deliberately limited arithmetic expression."""
-        candidate = text.strip().replace("×", "*").replace("÷", "/")
-        candidate = re.sub(
-            r"^(what\s+is|calculate|compute)\s+",
-            "",
-            candidate,
-            flags=re.I,
-        )
-        candidate = candidate.rstrip("?. ")
-
-        if not candidate or not re.fullmatch(
-            r"[0-9\s+\-*/().%]+", candidate
-        ):
-            return None
-
-        try:
-            result = eval(candidate, {"__builtins__": {}}, {})  # noqa: S307
-        except (ArithmeticError, SyntaxError, TypeError, ValueError):
-            return None
-
-        if isinstance(result, (int, float)) and not isinstance(result, bool):
-            return str(result)
-        return None
+    except Exception as e:
+        return f"Error connecting to {CURRENT_MODEL}:\n{e}"
 
 
-def run_terminal_chat(ai: AIEngine) -> None:
-    """Run an interactive terminal chat loop."""
-    print("Orbit AI terminal chat started.")
-    print("Type /clear to reset the conversation or /quit to exit.\n")
+# ============================================================
+# CLI MODE
+# ============================================================
+
+def shell_out():
+
+    print("\n==============================")
+    print("       ORBIT AI - CLI")
+    print("==============================")
+
+    print(f"Model: {get_model()}")
+    print("Type 'exit' or 'quit' to stop.\n")
+
+    messages = []
 
     while True:
-        try:
-            user_text = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nGoodbye.")
-            return
-
-        if user_text.casefold() in {"/quit", "/exit"}:
-            print("Goodbye.")
-            return
-
-        if user_text.casefold() == "/clear":
-            ai.clear_history()
-            print("Conversation cleared.")
-            continue
-
-        if not user_text:
-            continue
 
         try:
-            print(f"Orbit AI: {ai.respond(user_text)}\n")
-        except AIProviderError as error:
-            print(f"Orbit AI error: {error}\n")
+            user_input = input("You: ")
 
+        except KeyboardInterrupt:
+            break
 
-def _wrapped_lines(font, text: str, max_width: int) -> list[str]:
-    """Wrap text using actual Pygame font width."""
-    lines: list[str] = []
+        if user_input.lower() in ["exit", "quit"]:
+            break
 
-    for paragraph in text.splitlines() or [""]:
-        if not paragraph:
-            lines.append("")
+        if not user_input.strip():
             continue
 
-        current = ""
-        for word in paragraph.split(" "):
-            proposal = word if not current else f"{current} {word}"
+        messages.append({
+            "role": "user",
+            "content": user_input
+        })
 
-            if font.size(proposal)[0] <= max_width:
-                current = proposal
+        print("\nOrbit AI: ", end="", flush=True)
+
+        ai_message = get_ai_response(messages)
+
+        print(ai_message)
+        print()
+
+        messages.append({
+            "role": "assistant",
+            "content": ai_message
+        })
+
+
+# ============================================================
+# PYGAME CONFIG
+# ============================================================
+
+WIDTH = 1000
+HEIGHT = 700
+
+BG_COLOR = (18, 20, 25)
+PANEL_COLOR = (25, 28, 35)
+INPUT_BG = (35, 39, 48)
+
+TEXT_COLOR = (235, 238, 245)
+
+USER_COLOR = (100, 190, 255)
+AI_COLOR = (130, 230, 150)
+
+HEADER_COLOR = (30, 34, 42)
+
+BORDER_COLOR = (60, 65, 75)
+
+FONT_SIZE = 21
+SMALL_FONT = 16
+
+PADDING = 14
+
+
+# ============================================================
+# ORBIT GUI
+# ============================================================
+
+class OrbitGUI:
+
+    def __init__(self):
+
+        pygame.init()
+
+        self.screen = pygame.display.set_mode(
+            (WIDTH, HEIGHT),
+            pygame.RESIZABLE
+        )
+
+        pygame.display.set_caption(
+            "Orbit AI"
+        )
+
+        self.clock = pygame.time.Clock()
+
+        self.font = pygame.font.SysFont(
+            "Arial",
+            FONT_SIZE
+        )
+
+        self.small_font = pygame.font.SysFont(
+            "Arial",
+            SMALL_FONT
+        )
+
+        self.title_font = pygame.font.SysFont(
+            "Arial",
+            25,
+            bold=True
+        )
+
+        self.messages = []
+
+        self.user_text = ""
+
+        self.scroll_y = 0
+
+        self.is_loading = False
+
+        self.running = True
+
+        self.input_rect = pygame.Rect(
+            PADDING,
+            HEIGHT - 60,
+            WIDTH - 2 * PADDING,
+            45
+        )
+
+        self.history_rect = pygame.Rect(
+            0,
+            55,
+            WIDTH,
+            HEIGHT - 125
+        )
+
+
+    # ========================================================
+    # TEXT WRAPPING
+    # ========================================================
+
+    def wrap_text(self, text, width, color):
+
+        lines = []
+
+        paragraphs = text.split("\n")
+
+        for paragraph in paragraphs:
+
+            if not paragraph:
+                lines.append("")
                 continue
 
-            if current:
-                lines.append(current)
+            words = paragraph.split()
 
-            while font.size(word)[0] > max_width and len(word) > 1:
-                split_at = max(1, len(word) // 2)
-                while (
-                    split_at > 1
-                    and font.size(word[:split_at])[0] > max_width
-                ):
-                    split_at -= 1
-                lines.append(word[:split_at])
-                word = word[split_at:]
+            current_line = ""
 
-            current = word
+            for word in words:
 
-        lines.append(current)
+                test_line = (
+                    word
+                    if not current_line
+                    else current_line + " " + word
+                )
 
-    return lines
+                if self.font.size(test_line)[0] <= width:
+
+                    current_line = test_line
+
+                else:
+
+                    if current_line:
+                        lines.append(current_line)
+
+                    current_line = word
+
+            if current_line:
+                lines.append(current_line)
+
+        return [
+            self.font.render(
+                line,
+                True,
+                color
+            )
+            for line in lines
+        ]
 
 
-def run_pygame_chat(ai: AIEngine) -> None:
-    """Open the Pygame chat interface."""
-    try:
-        import pygame
-    except ImportError as error:
-        raise RuntimeError(
-            "Pygame is not installed. Install it with: "
-            "python -m pip install pygame"
-        ) from error
+    # ========================================================
+    # TOTAL CHAT HEIGHT
+    # ========================================================
 
-    pygame.init()
-    pygame.display.set_caption("Orbit AI")
+    def get_chat_height(self):
 
-    width, height = 980, 700
-    screen = pygame.display.set_mode(
-        (width, height), pygame.RESIZABLE
-    )
-    clock = pygame.time.Clock()
+        total_height = PADDING
 
-    background = (18, 24, 38)
-    panel = (28, 38, 57)
-    input_panel = (38, 50, 74)
-    user_bubble = (55, 95, 165)
-    assistant_bubble = (46, 63, 87)
-    accent = (111, 205, 255)
-    text_color = (239, 244, 250)
-    muted = (174, 190, 210)
+        for msg in self.messages:
 
-    title_font = pygame.font.Font(None, 34)
-    body_font = pygame.font.Font(None, 25)
-    small_font = pygame.font.Font(None, 20)
+            wrapped = self.wrap_text(
+                msg["text"],
+                WIDTH - 80,
+                TEXT_COLOR
+            )
 
-    transcript: list[tuple[str, str, bool]] = [
-        (
-            "Orbit AI",
-            "Hello! I am your local Orbit AI. Type a message and press Enter.",
-            False,
-        )
-    ]
+            total_height += (
+                FONT_SIZE + 6
+            )
 
-    typed = ""
-    scroll_offset = 0
-    running = True
-    active = True
+            total_height += (
+                len(wrapped)
+                * (FONT_SIZE + 5)
+            )
 
-    def send_message() -> None:
-        nonlocal typed, scroll_offset
+            total_height += 18
 
-        message = typed.strip()
-        if not message:
-            return
+        return total_height
 
-        typed = ""
 
-        if message.casefold() == "/clear":
-            ai.clear_history()
-            transcript[:] = [
-                ("Orbit AI", "Conversation cleared.", False)
-            ]
-            scroll_offset = 0
-            return
+    # ========================================================
+    # SCROLL TO BOTTOM
+    # ========================================================
 
-        transcript.append(("You", message, True))
+    def scroll_to_bottom(self):
+
+        total_height = self.get_chat_height()
+
+        available = self.history_rect.height
+
+        if total_height > available:
+
+            self.scroll_y = (
+                available
+                - total_height
+                - PADDING
+            )
+
+        else:
+
+            self.scroll_y = 0
+
+
+    # ========================================================
+    # AI THREAD
+    # ========================================================
+
+    def get_response_gui(self, prompt):
+
+        self.is_loading = True
 
         try:
-            answer = ai.respond(message)
-            transcript.append(("Orbit AI", answer, False))
-        except AIProviderError as error:
-            transcript.append(("AI error", str(error), False))
-        except Exception as error:
-            transcript.append(("Application error", str(error), False))
 
-        scroll_offset = 0
+            chat_history = []
 
-    while running:
-        current_width, current_height = screen.get_size()
-        current_width = max(520, current_width)
-        current_height = max(420, current_height)
+            for m in self.messages:
 
-        header_rect = pygame.Rect(0, 0, current_width, 66)
-        input_rect = pygame.Rect(
-            18,
-            current_height - 74,
-            current_width - 150,
-            52,
-        )
-        send_rect = pygame.Rect(
-            current_width - 120,
-            current_height - 74,
-            102,
-            52,
-        )
-        chat_rect = pygame.Rect(
-            18,
-            82,
-            current_width - 36,
-            current_height - 172,
-        )
+                if m["type"] == "user":
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+                    chat_history.append({
+                        "role": "user",
+                        "content": m["text"]
+                    })
 
-            elif event.type == pygame.VIDEORESIZE:
-                new_w = max(520, event.size[0])
-                new_h = max(420, event.size[1])
-                screen = pygame.display.set_mode(
-                    (new_w, new_h), pygame.RESIZABLE
-                )
+                elif m["type"] == "ai":
 
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    active = input_rect.collidepoint(event.pos)
-                    if send_rect.collidepoint(event.pos):
-                        send_message()
-                        active = True
+                    chat_history.append({
+                        "role": "assistant",
+                        "content": m["text"]
+                    })
 
-                elif event.button == 4:
-                    scroll_offset = max(0, scroll_offset - 50)
+            ai_text = get_ai_response(
+                chat_history
+            )
 
-                elif event.button == 5:
-                    scroll_offset += 50
+            self.messages.append({
+                "type": "ai",
+                "text": ai_text
+            })
 
-            elif event.type == pygame.MOUSEWHEEL:
-                scroll_offset = max(0, scroll_offset - event.y * 50)
+        except Exception as e:
 
-            elif event.type == pygame.KEYDOWN and active:
-                if event.key == pygame.K_RETURN:
-                    send_message()
-                elif event.key == pygame.K_BACKSPACE:
-                    typed = typed[:-1]
-                elif event.key == pygame.K_ESCAPE:
-                    active = False
-                elif event.unicode and event.unicode.isprintable():
-                    typed += event.unicode
+            self.messages.append({
+                "type": "ai",
+                "text": f"Error:\n{e}"
+            })
 
-        screen.fill(background)
-        pygame.draw.rect(screen, panel, header_rect)
+        finally:
 
-        screen.blit(
-            title_font.render("Orbit AI", True, text_color),
-            (20, 15),
+            self.is_loading = False
+
+            self.scroll_to_bottom()
+
+
+    # ========================================================
+    # HEADER
+    # ========================================================
+
+    def draw_header(self):
+
+        pygame.draw.rect(
+            self.screen,
+            HEADER_COLOR,
+            (0, 0, WIDTH, 55)
         )
 
-        status = (
-            f"Local • {ai.model}"
-            if ai.provider == "ollama"
-            else "Offline demo"
+        title = self.title_font.render(
+            "ORBIT AI",
+            True,
+            TEXT_COLOR
         )
-        status_surface = small_font.render(status, True, accent)
-        screen.blit(
+
+        self.screen.blit(
+            title,
+            (PADDING, 14)
+        )
+
+        model = get_model()
+
+        if model == BIG_MODEL:
+
+            status = "● QWEN3-CODER  •  USB"
+
+            status_color = (100, 230, 150)
+
+        else:
+
+            status = "● QWEN3 0.6B  •  LOCAL"
+
+            status_color = (100, 180, 255)
+
+        status_surface = self.small_font.render(
+            status,
+            True,
+            status_color
+        )
+
+        self.screen.blit(
             status_surface,
             (
-                current_width - status_surface.get_width() - 20,
-                24,
-            ),
+                WIDTH - status_surface.get_width() - PADDING,
+                20
+            )
+        )
+
+
+    # ========================================================
+    # MESSAGE BUBBLES
+    # ========================================================
+
+    def draw_message(self, msg, y):
+
+        is_user = msg["type"] == "user"
+
+        if is_user:
+
+            color = USER_COLOR
+            prefix = "You"
+
+        else:
+
+            color = AI_COLOR
+            prefix = "Orbit AI"
+
+        prefix_surface = self.small_font.render(
+            prefix,
+            True,
+            color
+        )
+
+        self.screen.blit(
+            prefix_surface,
+            (PADDING + 10, y)
+        )
+
+        y += 23
+
+        wrapped = self.wrap_text(
+            msg["text"],
+            WIDTH - 80,
+            TEXT_COLOR
+        )
+
+        for surface in wrapped:
+
+            if (
+                y > self.history_rect.y - 30
+                and y < self.history_rect.bottom
+            ):
+
+                self.screen.blit(
+                    surface,
+                    (PADDING + 25, y)
+                )
+
+            y += FONT_SIZE + 5
+
+        return y + 18
+
+
+    # ========================================================
+    # INPUT
+    # ========================================================
+
+    def draw_input(self):
+
+        pygame.draw.rect(
+            self.screen,
+            INPUT_BG,
+            self.input_rect,
+            border_radius=10
         )
 
         pygame.draw.rect(
-            screen,
-            panel,
-            chat_rect,
-            border_radius=14,
+            self.screen,
+            BORDER_COLOR,
+            self.input_rect,
+            width=1,
+            border_radius=10
         )
 
-        clip_before = screen.get_clip()
-        screen.set_clip(chat_rect)
+        display_text = self.user_text
 
-        y = chat_rect.bottom - 16 + scroll_offset
-        bubble_layout = []
-        max_bubble_width = max(
-            230,
-            int(chat_rect.width * 0.74),
-        )
+        if self.is_loading:
 
-        for speaker, message, is_user in reversed(transcript):
-            lines = _wrapped_lines(
-                body_font,
-                message,
-                max_bubble_width - 30,
-            )
+            display_text += "  Thinking..."
 
-            bubble_height = 34 + len(lines) * 25
-            bubble_width = min(
-                max_bubble_width,
-                max(
-                    160,
-                    max(
-                        (body_font.size(line)[0] for line in lines),
-                        default=0,
-                    ) + 30,
-                ),
-            )
+        else:
 
-            y -= bubble_height
-            x = (
-                chat_rect.right - bubble_width - 14
-                if is_user
-                else chat_rect.left + 14
-            )
+            display_text += "|"
 
-            rect = pygame.Rect(
-                x,
-                y,
-                bubble_width,
-                bubble_height,
-            )
-
-            color = user_bubble if is_user else assistant_bubble
-            bubble_layout.append(
-                (rect, lines, color, speaker, is_user)
-            )
-            y -= 14
-
-        min_y = min(
-            (item[0].top for item in bubble_layout),
-            default=chat_rect.top,
-        )
-        max_scroll = max(
-            0,
-            chat_rect.top - min_y + 14,
-        )
-        scroll_offset = min(scroll_offset, max_scroll)
-
-        if scroll_offset and max_scroll:
-            y = chat_rect.bottom - 16 + scroll_offset
-            bubble_layout = []
-
-            for speaker, message, is_user in reversed(transcript):
-                lines = _wrapped_lines(
-                    body_font,
-                    message,
-                    max_bubble_width - 30,
-                )
-
-                bubble_height = 34 + len(lines) * 25
-                bubble_width = min(
-                    max_bubble_width,
-                    max(
-                        160,
-                        max(
-                            (body_font.size(line)[0] for line in lines),
-                            default=0,
-                        ) + 30,
-                    ),
-                )
-
-                y -= bubble_height
-                x = (
-                    chat_rect.right - bubble_width - 14
-                    if is_user
-                    else chat_rect.left + 14
-                )
-
-                rect = pygame.Rect(
-                    x,
-                    y,
-                    bubble_width,
-                    bubble_height,
-                )
-
-                color = user_bubble if is_user else assistant_bubble
-                bubble_layout.append(
-                    (rect, lines, color, speaker, is_user)
-                )
-                y -= 14
-
-        for rect, lines, color, speaker, is_user in bubble_layout:
-            pygame.draw.rect(
-                screen,
-                color,
-                rect,
-                border_radius=12,
-            )
-
-            label_color = accent if is_user else muted
-            screen.blit(
-                small_font.render(
-                    speaker,
-                    True,
-                    label_color,
-                ),
-                (rect.x + 15, rect.y + 8),
-            )
-
-            text_y = rect.y + 28
-            for line in lines:
-                screen.blit(
-                    body_font.render(
-                        line,
-                        True,
-                        text_color,
-                    ),
-                    (rect.x + 15, text_y),
-                )
-                text_y += 25
-
-        screen.set_clip(clip_before)
-
-        pygame.draw.rect(
-            screen,
-            input_panel,
-            input_rect,
-            border_radius=10,
-        )
-
-        border_color = accent if active else muted
-        pygame.draw.rect(
-            screen,
-            border_color,
-            input_rect,
-            2,
-            border_radius=10,
-        )
-
-        display_text = typed or "Type a message…"
-        display_color = text_color if typed else muted
-        rendered_input = body_font.render(
+        text_surface = self.font.render(
             display_text,
             True,
-            display_color,
+            TEXT_COLOR
         )
 
-        input_clip = screen.get_clip()
-        screen.set_clip(input_rect.inflate(-18, -8))
-        screen.blit(
-            rendered_input,
-            (input_rect.x + 12, input_rect.y + 15),
+        self.screen.blit(
+            text_surface,
+            (
+                self.input_rect.x + 12,
+                self.input_rect.y + 10
+            )
         )
-        screen.set_clip(input_clip)
+
+
+    # ========================================================
+    # SCROLLBAR
+    # ========================================================
+
+    def draw_scrollbar(self):
+
+        total_height = self.get_chat_height()
+
+        available = self.history_rect.height
+
+        if total_height <= available:
+
+            return
+
+        bar_height = max(
+            40,
+            int(
+                available
+                * available
+                / total_height
+            )
+        )
+
+        max_scroll = total_height - available
+
+        progress = (
+            -self.scroll_y
+            / max_scroll
+            if max_scroll > 0
+            else 0
+        )
+
+        bar_y = (
+            self.history_rect.y
+            +
+            progress
+            * (
+                available
+                - bar_height
+            )
+        )
 
         pygame.draw.rect(
-            screen,
-            accent,
-            send_rect,
-            border_radius=10,
-        )
-
-        send_label = body_font.render(
-            "Send",
-            True,
-            background,
-        )
-
-        screen.blit(
-            send_label,
+            self.screen,
+            BORDER_COLOR,
             (
-                send_rect.centerx - send_label.get_width() // 2,
-                send_rect.centery - send_label.get_height() // 2,
+                WIDTH - 7,
+                bar_y,
+                5,
+                bar_height
             ),
+            border_radius=3
         )
 
-        hint = "Enter sends • Mouse wheel scrolls • Esc unfocuses"
-        screen.blit(
-            small_font.render(hint, True, muted),
-            (22, current_height - 18),
+
+    # ========================================================
+    # MAIN LOOP
+    # ========================================================
+
+    def run(self):
+
+        while self.running:
+
+            self.screen.fill(
+                BG_COLOR
+            )
+
+            # -----------------------------------------------
+            # EVENTS
+            # -----------------------------------------------
+
+            for event in pygame.event.get():
+
+                if event.type == pygame.QUIT:
+
+                    self.running = False
+
+                # -------------------------------------------
+                # RESIZE
+                # -------------------------------------------
+
+                elif event.type == pygame.VIDEORESIZE:
+
+                    global WIDTH, HEIGHT
+
+                    WIDTH = max(
+                        600,
+                        event.w
+                    )
+
+                    HEIGHT = max(
+                        400,
+                        event.h
+                    )
+
+                    self.input_rect = pygame.Rect(
+                        PADDING,
+                        HEIGHT - 60,
+                        WIDTH - 2 * PADDING,
+                        45
+                    )
+
+                    self.history_rect = pygame.Rect(
+                        0,
+                        55,
+                        WIDTH,
+                        HEIGHT - 125
+                    )
+
+                # -------------------------------------------
+                # MOUSE WHEEL
+                # -------------------------------------------
+
+                elif event.type == pygame.MOUSEWHEEL:
+
+                    if self.history_rect.collidepoint(
+                        pygame.mouse.get_pos()
+                    ):
+
+                        self.scroll_y += (
+                            event.y * 25
+                        )
+
+                        if self.scroll_y > 0:
+
+                            self.scroll_y = 0
+
+                        total_height = (
+                            self.get_chat_height()
+                        )
+
+                        max_scroll = (
+                            self.history_rect.height
+                            - total_height
+                            - PADDING
+                        )
+
+                        if (
+                            total_height
+                            > self.history_rect.height
+                        ):
+
+                            if (
+                                self.scroll_y
+                                < max_scroll
+                            ):
+
+                                self.scroll_y = (
+                                    max_scroll
+                                )
+
+                        else:
+
+                            self.scroll_y = 0
+
+                # -------------------------------------------
+                # KEYBOARD
+                # -------------------------------------------
+
+                elif event.type == pygame.KEYDOWN:
+
+                    if (
+                        event.key
+                        == pygame.K_RETURN
+                        and not self.is_loading
+                    ):
+
+                        if self.user_text.strip():
+
+                            prompt = (
+                                self.user_text
+                            )
+
+                            self.messages.append({
+                                "type": "user",
+                                "text": prompt
+                            })
+
+                            self.user_text = ""
+
+                            threading.Thread(
+                                target=self.get_response_gui,
+                                args=(prompt,),
+                                daemon=True
+                            ).start()
+
+                            self.scroll_to_bottom()
+
+                    elif (
+                        event.key
+                        == pygame.K_BACKSPACE
+                    ):
+
+                        self.user_text = (
+                            self.user_text[:-1]
+                        )
+
+                    elif event.unicode:
+
+                        self.user_text += (
+                            event.unicode
+                        )
+
+
+            # =================================================
+            # DRAW HEADER
+            # =================================================
+
+            self.draw_header()
+
+
+            # =================================================
+            # CHAT AREA
+            # =================================================
+
+            self.screen.set_clip(
+                self.history_rect
+            )
+
+            current_y = (
+                self.history_rect.y
+                + self.scroll_y
+                + PADDING
+            )
+
+            for msg in self.messages:
+
+                current_y = self.draw_message(
+                    msg,
+                    current_y
+                )
+
+            self.screen.set_clip(None)
+
+
+            # =================================================
+            # LOADING INDICATOR
+            # =================================================
+
+            if self.is_loading:
+
+                loading = self.small_font.render(
+                    "Orbit AI is thinking...",
+                    True,
+                    AI_COLOR
+                )
+
+                self.screen.blit(
+                    loading,
+                    (
+                        PADDING,
+                        HEIGHT - 87
+                    )
+                )
+
+
+            # =================================================
+            # INPUT
+            # =================================================
+
+            self.draw_input()
+
+            self.draw_scrollbar()
+
+
+            # =================================================
+            # DISPLAY
+            # =================================================
+
+            pygame.display.flip()
+
+            self.clock.tick(60)
+
+
+        pygame.quit()
+
+        sys.exit()
+
+
+# ============================================================
+# PYGAME MODE
+# ============================================================
+
+def pygame_out():
+
+    gui = OrbitGUI()
+
+    gui.run()
+
+
+# ============================================================
+# ONE-LINE QUESTION
+# ============================================================
+
+def function_out(text):
+
+    messages = [
+        {
+            "role": "user",
+            "content": text
+        }
+    ]
+
+    response = get_ai_response(
+        messages
+    )
+
+    return f"Orbit AI: {response}"
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+
+    print()
+    print("==============================")
+    print("         ORBIT AI")
+    print("==============================")
+    print()
+    print("Detected model:")
+    print(f"  {get_model()}")
+    print()
+
+    print("Choose your interface:")
+    print("1. Text-operated (CLI)")
+    print("2. UI-operated (Pygame)")
+    print("3. One-line question")
+
+    choice = input(
+        "\nEnter choice (1, 2 or 3): "
+    )
+
+    if choice == "1":
+
+        shell_out()
+
+    elif choice == "2":
+
+        pygame_out()
+
+    elif choice == "3":
+
+        question = input(
+            "Enter your question: "
         )
 
-        pygame.display.flip()
-        clock.tick(60)
+        print(
+            function_out(question)
+        )
 
-    pygame.quit()
+    else:
 
-
-def build_parser() -> argparse.ArgumentParser:
-    """Create the command-line parser."""
-    parser = argparse.ArgumentParser(
-        description="Orbit AI - local Ollama assistant with Pygame UI."
-    )
-
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--text",
-        metavar="PROMPT",
-        help="Answer one prompt and exit.",
-    )
-    mode.add_argument(
-        "--cli",
-        action="store_true",
-        help="Start terminal chat.",
-    )
-    mode.add_argument(
-        "--ui",
-        action="store_true",
-        help="Start the Pygame chat window (default).",
-    )
-
-    parser.add_argument(
-        "--provider",
-        choices=("offline", "ollama"),
-        default="ollama",
-        help="Response source (default: ollama).",
-    )
-
-    parser.add_argument(
-        "--model",
-        default="qwen3:4b",
-        help="Ollama model name (default: qwen3:4b).",
-    )
-
-    parser.add_argument(
-        "--base-url",
-        default="http://localhost:11434",
-        help="Ollama server URL.",
-    )
-
-    return parser
-
-
-def main() -> int:
-    """Run the selected application mode."""
-    args = build_parser().parse_args()
-
-    ai = AIEngine(
-        provider=args.provider,
-        model=args.model,
-        base_url=args.base_url,
-    )
-
-    try:
-        if args.text is not None:
-            print(ai.respond(args.text))
-        elif args.cli:
-            run_terminal_chat(ai)
-        else:
-            run_pygame_chat(ai)
-    except (AIProviderError, RuntimeError) as error:
-        print(f"Error: {error}")
-        return 1
-    except KeyboardInterrupt:
-        print("\nStopped.")
-
-    return 0
+        print(
+            "Invalid choice. Exiting."
+        )
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+
+    main()
