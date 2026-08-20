@@ -27,6 +27,13 @@ class player:
         self.inventory = {'armour':[], 
                           'item':[],
                           'weapon':[]}
+        
+        # Inventory management
+        self.inventory_section = 'weapon'
+        self.inventory_index = {'weapon': 0, 'armour': 0, 'item': 0}
+        self.equipped = {'weapon': None, 'armour': None, 'item': None}
+        self.base_speed = 5
+        self.speed = self.base_speed
     
     def collect_coins(self):
         if self.is_on_wall("C", True):
@@ -46,10 +53,13 @@ class player:
     def move(self, left, right):
         Or = True
         block = "B"
+        INVENTORY_WIDTH = 150  # Prevent player from entering inventory area
+        MIN_X = INVENTORY_WIDTH / 40  # Convert to block units (40 pixels per block)
+        
         if left:
             if not self.is_touching_wall_left(block, Or):
                 for i in range(self.speed):
-                    if not self.is_touching_wall_left(block, Or):
+                    if not self.is_touching_wall_left(block, Or) and self.x > MIN_X:
                         self.x -= 1
                     else:
                         pass
@@ -199,13 +209,55 @@ class player:
             return False
 
     def AppendInventory(self, item):
-        self.inventory.append(item)
+        """Add item to appropriate inventory section"""
+        if isinstance(item, str):
+            if "Armour" in item or "Shield" in item:
+                self.inventory['armour'].append(item)
+            elif "Sword" in item or "Bow" in item or "Dagger" in item or "Cannon" in item:
+                self.inventory['weapon'].append(item)
+            else:
+                self.inventory['item'].append(item)
+    
+    def switch_inventory_section(self):
+        """Switch to next inventory section"""
+        sections = ['weapon', 'armour', 'item']
+        current_idx = sections.index(self.inventory_section)
+        self.inventory_section = sections[(current_idx + 1) % len(sections)]
+        self.inventory_index[self.inventory_section] = 0
+    
+    def scroll_inventory(self, direction):
+        """Scroll through current inventory section"""
+        section = self.inventory_section
+        current_items = self.inventory[section]
+        if not current_items:
+            return
+        self.inventory_index[section] += direction
+        self.inventory_index[section] %= len(current_items)
+    
+    def equip_item(self):
+        """Equip the currently selected item"""
+        section = self.inventory_section
+        items = self.inventory[section]
+        if not items:
+            return
+        selected_item = items[self.inventory_index[section]]
+        self.equipped[section] = selected_item
+        self._apply_item_effects()
+    
+    def _apply_item_effects(self):
+        """Apply effects of equipped items"""
+        self.speed = self.base_speed
+        if self.equipped.get('weapon') and "Bow" in self.equipped['weapon']:
+            self.speed = self.base_speed + 1
+        if self.equipped.get('item') and "Speed" in self.equipped['item']:
+            self.speed += 2
 
     def Take_item(self, item):
-        for i in range(len(self.inventory)):
-            if self.inventory[i] == item:
-                self.inventory.pop(i)
-                break
+        for section in self.inventory:
+            if item in self.inventory[section]:
+                self.inventory[section].remove(item)
+                return True
+        return False
     
     def FireTick(self, ticks):
         if self.on_fire:
@@ -237,6 +289,12 @@ class Pirate(player):
         self.damage = 4
         self.jumpmax = 2
         player.__init__(self, level, self.jumpmax, self.hp)
+        
+        # Start with a basic sword
+        self.inventory['weapon'].append("Sword +1")
+        self.equipped['weapon'] = "Sword +1"
+        self.base_speed = 7
+        self.speed = 7
     
     def attack(self):
         self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level)

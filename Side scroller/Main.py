@@ -31,7 +31,39 @@ def start():
     pygame.display.set_caption("Steppefall")
     return screen
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies):
+def draw_inventory(screen, inventory_data, font):
+    """Draw inventory panel on the left side"""
+    pygame.draw.rect(screen, (30, 30, 50), (0, 50, 150, 670))
+    pygame.draw.rect(screen, (100, 100, 150), (0, 50, 150, 670), 2)
+    
+    section = inventory_data['section']
+    items = inventory_data['items']
+    index = inventory_data['index']
+    
+    section_colors = {'weapon': (255, 100, 100), 'armour': (100, 150, 255), 'item': (150, 255, 100)}
+    color = section_colors.get(section, (255, 255, 255))
+    
+    title = font.render(section.upper(), True, color)
+    screen.blit(title, (10, 60))
+    
+    y_pos = 90
+    for i, item in enumerate(items[:10]):
+        if i == index:
+            pygame.draw.rect(screen, (255, 255, 0), (5, y_pos - 2, 140, 20))
+            text = font.render(item[:15], True, (0, 0, 0))
+        else:
+            text = font.render(item[:15], True, (200, 200, 200))
+        screen.blit(text, (10, y_pos))
+        y_pos += 25
+    
+    if not items:
+        text = font.render("Empty", True, (100, 100, 100))
+        screen.blit(text, (10, 90))
+
+def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None):
+    INVENTORY_WIDTH = 150
+    GAME_WIDTH = 1280 - INVENTORY_WIDTH
+    
     add = [0, 0]
     contemplating = True
     while contemplating:
@@ -44,8 +76,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies)
             contemplating = False
     contemplating = True
     while contemplating:
-        if (player_x + add[0]) > 900 or ((player_x + add[0]) < 380 and player_x < 380):
-            if (player_x + add[0]) > 900:
+        if (player_x + add[0]) > 750 or ((player_x + add[0]) < 380 and player_x < 380):
+            if (player_x + add[0]) > 750:
                 add[0] -= 1
             else:
                 add[0] += 1
@@ -53,50 +85,56 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies)
             contemplating = False
     if add[0] > 0:
         add[0] = 0
-    elif len(level[0]) * 40 + add[0] < 1280:
-        add[0] = 1280 - len(level[0]) * 40
+    elif len(level[0]) * 40 + add[0] < GAME_WIDTH:
+        add[0] = GAME_WIDTH - len(level[0]) * 40
 
     if add[1] > 0:
         add[1] = 0
     elif len(level) * 40 + add[1] < 720:
         add[1] = 720 - len(level) * 40
         
-        
-        
-        
+    # Draw game area with inventory panel offset
     screen.fill((0, 0, 0))
-    pygame.draw.rect(screen, (0, 0, 255), (player_x+add[0], player_y+add[1], 40, 40))
+    
+    # Draw game world shifted right by inventory width
+    pygame.draw.rect(screen, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], 40, 40))
     
     for y in range(len(level)):
         for x in range(len(level[y])):
             if level[y][x] == "B":
-                pygame.draw.rect(screen, (0,255,0), (x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "L":
-                pygame.draw.rect(screen, (255,0,0), (x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (255,0,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "C":
-                pygame.draw.rect(screen, (255,255,0), (x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (255,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "H":
-                pygame.draw.rect(screen, (150, 75, 0), (x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
                 
     for i in range(len(bullets)):
         if bullets[i] is not None:
-            pygame.draw.rect(screen, (255, 255, 255), (bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width))
+            pygame.draw.rect(screen, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width))
     
     for i in range(len(enemies)):
-        pygame.draw.rect(screen, (0, 255, 255), (enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
+        pygame.draw.rect(screen, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
     
     
+    # Draw UI stats (shifted for inventory panel)
     font = pygame.font.SysFont(None, 30)
     text = font.render(str(hp), True, (255, 0, 0))
-    text_rect = text.get_rect(center=(1250, 30))
+    text_rect = text.get_rect(center=(INVENTORY_WIDTH + 1100, 30))
     screen.blit(text, text_rect)
     text = font.render(str(coins), True, (255, 255, 0))
-    text_rect = text.get_rect(center=(30, 30))
+    text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
     screen.blit(text, text_rect)
     if dam:
         damage = pygame.Surface((1280, 720), pygame.SRCALPHA)
         damage.fill((255, 0, 0, 100))
         screen.blit(damage, (0, 0))
+    
+    # Draw inventory panel (fixed, not affected by camera)
+    if inventory_data:
+        draw_inventory(screen, inventory_data, pygame.font.SysFont(None, 20))
+    
     return screen
 
 def death(screen):
@@ -154,9 +192,15 @@ def run(level):
                     
             if event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
-                    print("Scrolled up")
+                    player_1.scroll_inventory(-1)  # Up scrolls up in list
                 elif event.y < 0:
-                    print("Scrolled down")
+                    player_1.scroll_inventory(1)   # Down scrolls down in list
+            
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 2:  # Middle mouse button
+                    player_1.switch_inventory_section()
+                elif event.button == 1:  # Left mouse button to equip
+                    player_1.equip_item()
         
         #movement
         keys = pygame.key.get_pressed()
@@ -236,7 +280,14 @@ def run(level):
                 else:
                     player_1.AppendInventory(contents[1])
         
-        screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies)
+        # Prepare inventory data for display
+        inventory_data = {
+            'section': player_1.inventory_section,
+            'items': player_1.inventory[player_1.inventory_section],
+            'index': player_1.inventory_index[player_1.inventory_section]
+        }
+        
+        screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
         pygame.display.flip()
         clock.tick(40)
         ticks += 1
