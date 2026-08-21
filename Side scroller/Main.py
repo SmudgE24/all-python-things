@@ -117,6 +117,11 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     for i in range(len(enemies)):
         pygame.draw.rect(screen, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
     
+    # Draw weapon attacks
+    if bullets[0] is not None:
+        pygame.draw.rect(screen, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
+    if bullets[1] is not None:
+        pygame.draw.rect(screen, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
     
     # Draw UI stats (shifted for inventory panel)
     font = pygame.font.SysFont(None, 30)
@@ -175,6 +180,8 @@ def run(level):
     player_1.x = a[0]
     player_1.y = a[1]
     enemies = aBoard.spawn()
+    holding_attack = False
+    holding_super_attack = False
     while running:
         #helpfull for stomping on enemies heads
         player_1.last_x = player_1.x
@@ -189,6 +196,16 @@ def run(level):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     player_1.jump()
+                if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
+                    holding_attack = True
+                if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
+                    holding_super_attack = True
+            
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
+                    holding_attack = False
+                if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
+                    holding_super_attack = False
                     
             if event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
@@ -212,12 +229,21 @@ def run(level):
         #fire
         player_1.FireTick(ticks)
         
+        #weapon attacks
+        if holding_attack and player_1.current_attack is None:
+            player_1.attack()
+        if holding_super_attack and player_1.current_super is None and player_1.super_charged:
+            player_1.super_attack()
+        
+        player_1.update_attacks(holding_attack, holding_super_attack)
+        
         #fall out the world death
         if player_1.y > len(level) * 40:
             player_1.hp = 0
         
         #collect coins
-        player_1.collect_coins()
+        if player_1.collect_coins():
+            player_1.recharge_super(1)
             
         #damage flash, no, not that type
         if player_1.hp < lastHp:
@@ -250,6 +276,22 @@ def run(level):
             enemy.update_vy()
             enemy.move(ticks)
         
+            # Check weapon hits
+            hit_by_weapon = False
+            if player_1.current_attack is not None:
+                if player_1.current_attack.is_touching_enemy(enemy.x, enemy.y):
+                    player_1.coins += 5
+                    hit_by_weapon = True
+            
+            if player_1.current_super is not None:
+                if player_1.current_super.is_touching_enemy(enemy.x, enemy.y):
+                    player_1.coins += 10
+                    hit_by_weapon = True
+            
+            if hit_by_weapon:
+                enemies.pop(i)
+                continue
+        
             result = enemy.isTouchingPlayer(player_1)
         
             if result == "stomp":
@@ -268,17 +310,23 @@ def run(level):
         #open chests
         a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
         for i in range(len(a)):
-            if level[a[i][1]][a[i][0]] == "H":
-                aBoard.setPoint(a[i][0], a[i][1], tile=".")
-                contents = aBoard.find_chest_contents()
-                if contents[0] == "10 Coins":
-                    player_1.coins += 10
-                else:
-                    player_1.AppendInventory(contents[0])
-                if contents[1] == "10 Coins":
-                    player_1.coins += 10
-                else:
-                    player_1.AppendInventory(contents[1])
+            try:
+                if level[a[i][1]][a[i][0]] == "H":
+                    aBoard.setPoint(a[i][0], a[i][1], tile=".")
+                    contents = aBoard.find_chest_contents()
+                    if contents[0] == "10 Coins":
+                        player_1.coins += 10
+                    else:
+                        player_1.AppendInventory(contents[0])
+                    if contents[1] == "10 Coins":
+                        player_1.coins += 10
+                    else:
+                        player_1.AppendInventory(contents[1])
+            except IndexError:
+                print("Player is out of bounds, but this should not happen. Killing the player to prevent further issues.")
+                player_1.hp = 0
+            except Exception as e:
+                print(f"An unexpected error occurred while checking for chests: {e}")
         
         # Prepare inventory data for display
         inventory_data = {

@@ -5,6 +5,7 @@ Created on Tue Jun 30 18:29:29 2026
 
 @author: ethanbrown
 """
+import Items
 
 class player:
     def __init__(self, level, jumpmax, hp):
@@ -23,6 +24,7 @@ class player:
 
         self.jumpmax = jumpmax
         self.hp = hp
+        self.max_hp = hp
 
         self.inventory = {'armour':[], 
                           'item':[],
@@ -34,6 +36,9 @@ class player:
         self.equipped = {'weapon': None, 'armour': None, 'item': None}
         self.base_speed = 5
         self.speed = self.base_speed
+        self.damage = 1  # Base damage
+        self.void_immune = False  # Immunity to void damage
+        self.active_effects = Items.ItemEffect()  # Track active item effects
     
     def collect_coins(self):
         if self.is_on_wall("C", True):
@@ -242,15 +247,35 @@ class player:
             return
         selected_item = items[self.inventory_index[section]]
         self.equipped[section] = selected_item
-        self._apply_item_effects()
+        self._apply_item_effects(selected_item)
     
-    def _apply_item_effects(self):
+    def _apply_item_effects(self, item_name=None):
         """Apply effects of equipped items"""
         self.speed = self.base_speed
-        if self.equipped.get('weapon') and "Bow" in self.equipped['weapon']:
-            self.speed = self.base_speed + 1
-        if self.equipped.get('item') and "Speed" in self.equipped['item']:
-            self.speed += 2
+        
+        # Apply weapon effects
+        if self.equipped.get('weapon'):
+            try:
+                weapon = Items.Item(self.equipped['weapon'])
+                if "Bow" in self.equipped['weapon']:
+                    self.speed += 1
+            except ValueError:
+                pass
+        
+        # Apply armour effects
+        if self.equipped.get('armour'):
+            try:
+                armour = Items.Item(self.equipped['armour'])
+            except ValueError:
+                pass
+        
+        # Apply item effects
+        if self.equipped.get('item') and item_name == self.equipped.get('item'):
+            try:
+                item = Items.Item(self.equipped['item'])
+                item.apply_effect(self)
+            except ValueError:
+                pass
 
     def Take_item(self, item):
         for section in self.inventory:
@@ -281,20 +306,18 @@ class Pirate(player):
         self.super_charged = True
         self.current_attack = None
         self.current_super = None
-        # self.attack_type = "sword"
-        # self.ability = "dash"
-        # self.super = "cannon"
         self.hp = 3
         self.speed = 7
         self.damage = 4
         self.jumpmax = 2
         player.__init__(self, level, self.jumpmax, self.hp)
         
-        # Start with a basic sword
+        # Start with a basic sword using item system
         self.inventory['weapon'].append("Sword +1")
         self.equipped['weapon'] = "Sword +1"
         self.base_speed = 7
         self.speed = 7
+        self.max_hp = 3
     
     def attack(self):
         self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level)
@@ -351,6 +374,13 @@ class weapon:
             return True
         else:
             return False
+    
+    def is_touching_enemy(self, enemy_x, enemy_y):
+        """Check if weapon is touching an enemy"""
+        if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 
+            (self.y < (enemy_y + 40) and (self.y + self.size_hight) > enemy_y)):
+            return True
+        return False
     
     def touching(self, block):
         if self.level[self.y // 40][self.x // 40] == block:

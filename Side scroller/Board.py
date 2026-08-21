@@ -6,6 +6,7 @@ Created on Wed Jul  1 14:25:27 2026
 @author: ethanbrown
 """
 import Enemies
+import Items
 import random
 random.seed() 
 class board:
@@ -30,23 +31,29 @@ class board:
                     self.chests.append((j, i))
     
     def find_chest_contents(self):
-        items = ["10 Coins", "Jump boots", "Bow", "+1 life", "Void boots", "Shield +1", "Armour +1", "Armour +2", "Bomb", "Bottle o' healin", "Sword +3", "Key", "Time Freeze 15s", "Flame Gun", "Orb of power +5", "Dagger +1"]
-        raraty = [60, 15, 10, 1, 2, 8, 7, 5, 20, 7, 12, 1, 3, 4, 1, 10]
-        sum_of = 0
-        for i in range(len(raraty)):
-            sum_of += raraty[i]
-            
-        pickednumber1 = random.randint(0, sum_of)
-        pickednumber2 = random.randint(0, sum_of)
-        two = []
-        for number in [pickednumber1, pickednumber2]:
+        """Generate random chest contents from the item database"""
+        item_names = list(Items.ITEMS_DB.keys())
+        rarities = [Items.ITEMS_DB[name].get("rarity", "common") for name in item_names]
+        
+        # Weight items by rarity (common=60, uncommon=30, rare=10, very rare=1)
+        rarity_weights = {"common": 60, "uncommon": 30, "rare": 10, "very rare": 1}
+        weights = [rarity_weights.get(r, 10) for r in rarities]
+        
+        total_weight = sum(weights)
+        
+        # Pick 2 random items
+        two_items = []
+        for _ in range(2):
+            pick = random.randint(0, total_weight)
             current_weight = 0
-            for iteration in range(len(raraty)):
-                current_weight += raraty[iteration]
-                if number <= current_weight:
-                    two.append(items[iteration])
+            for i, weight in enumerate(weights):
+                current_weight += weight
+                if pick <= current_weight:
+                    two_items.append(item_names[i])
                     break
-        print(two)
+        
+        print(f"Chest contents: {two_items}")
+        return two_items
     
     def findPoint(self, point):
         level = self.level
