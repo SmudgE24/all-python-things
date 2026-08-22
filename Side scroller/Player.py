@@ -393,8 +393,9 @@ class Pirate(player):
         self.armour_durability = {'armour': 0, 'item': 0}
     
     def attack(self):
+        print(self.equipped)
         print(self.equipped['weapon'])
-        attack_type = self.equipped['weapon'][self.equipped['weapon']]['effect']
+        attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
         self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
     #def use_ability(self):
@@ -416,7 +417,10 @@ class Pirate(player):
             self.current_super = None
         
         if self.current_attack is not None:
-            self.current_attack.move(self.x+40, self.y+20)
+            if self.equipped['weapon'] == 'Flame Gun':
+                self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+            else:
+                self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
         if self.current_super is not None:
             self.current_super.move()
     
@@ -449,13 +453,29 @@ class weapon:
             else:
                 raise Exception("Please make both moveto_x and moveto_y either integers of both 'None'")
         elif self.attack_type == "fire":
-            player_pos = int((player_x + 20) // 40), int((player_y + 20) // 40)
-            fire_pos = [[1, 0], [1, 1], [1, -1], [2, 0], [2, 1], [2, -1], [2, 2], [2, -2]]
-            for i in range(8):
-                try:
-                    self.positions = (player_pos[0] + fire_pos[i][0], player_pos[1] + fire_pos[i][1])
-                except:
-                    pass
+            player_pos = (
+                int((player_x + 20) // 40),
+                int((player_y + 20) // 40)
+            )
+
+            fire_pos = [
+                [1, 0],
+                [1, 1],
+                [1, -1],
+                [2, 0],
+                [2, 1],
+                [2, -1],
+                [2, 2],
+                [2, -2]
+            ]
+
+            self.positions = []
+
+            for offset_x, offset_y in fire_pos:
+                self.positions.append((
+                    player_pos[0] + offset_x,
+                    player_pos[1] + offset_y
+                ))
     
     def is_touching_player(self, player_x, player_y):
         if ((self.x > player_x and self.x < (player_x + 40)) and (self.y > player_y and self.y < (player_y + 40))) or (((self.x + self.size_width) > player_x and (self.x + self.size_width) < (player_x + 40)) and ((self.y + self.size_hight) > (self.y + self.size_hight) and self.y < (player_y + 40))):
@@ -472,6 +492,7 @@ class weapon:
         elif self.attack_type == "fire":
             if self.positions is not None:
                 for i in range(len(self.positions)):
+                    print(self.positions)
                     fire_x, fire_y = self.positions[i][0], self.positions[i][1]
                     if ((fire_x * 40 < (enemy_x + 40) and (fire_x * 40 + 40) > enemy_x) and 
                         (fire_y * 40 < (enemy_y + 40) and (fire_y * 40 + 40) > enemy_y)):
