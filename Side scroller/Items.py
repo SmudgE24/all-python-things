@@ -13,21 +13,24 @@ ITEMS_DB = {
         "damage": 1,
         "attack_speed": 1.0,
         "rarity": "common",
-        "description": "A basic sword"
+        "description": "Stab",
+        "effect": "Stab"
     },
     "Sword +3": {
         "type": "weapon",
         "damage": 3,
         "attack_speed": 0.9,
         "rarity": "rare",
-        "description": "A powerful sword"
+        "description": "Stab",
+        "effect": "Stab"
     },
     "Dagger +1": {
         "type": "weapon",
         "damage": 1,
         "attack_speed": 1.5,
         "rarity": "common",
-        "description": "Fast but weak"
+        "description": "Stab",
+        "effect": "Stab"
     },
     "Bow": {
         "type": "weapon",

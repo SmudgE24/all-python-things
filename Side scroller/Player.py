@@ -393,17 +393,21 @@ class Pirate(player):
         self.armour_durability = {'armour': 0, 'item': 0}
     
     def attack(self):
-        self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level)
+        print(self.equipped['weapon'])
+        attack_type = self.equipped['weapon'][self.equipped['weapon']]['effect']
+        self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
     #def use_ability(self):
     
     def super_attack(self):
+        print(self.equipped['weapon'])
+        attack_type = "Stab"
         if self.super_charged:
             self.super_charged = False
             if self.going_left:
-                self.current_super = weapon((-10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level)
+                self.current_super = weapon((-10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
             else:
-                self.current_super = weapon((10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level)
+                self.current_super = weapon((10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
     def update_attacks(self, holding_attack, holding_super_attack):
         if not holding_attack:
@@ -424,23 +428,34 @@ class Pirate(player):
     
 
 class weapon:
-    def __init__(self, velocity, player_x, player_y, size_width, size_hight, level):
+    def __init__(self, velocity, player_x, player_y, size_width, size_hight, level, attack_type):
         self.velocity = velocity
         self.x = player_x
         self.y = player_y
         self.size_width = size_width
         self.size_hight = size_hight
         self.level = level
+        self.attack_type = attack_type
+        self.positions = None
     
-    def move(self, moveto_x=None, moveto_y=None):
-        if moveto_x is None and moveto_y is None:
-            self.x += self.velocity[0]
-            self.y += self.velocity[1]
-        elif moveto_x is not None and moveto_y is not None:
-            self.x = moveto_x
-            self.y = moveto_y
-        else:
-            raise Exception("Please make both moveto_x and moveto_y either integers of both 'None'")
+    def move(self, moveto_x=None, moveto_y=None, player_x=None, player_y=None):
+        if self.attack_type == "Stab":
+            if moveto_x is None and moveto_y is None:
+                self.x += self.velocity[0]
+                self.y += self.velocity[1]
+            elif moveto_x is not None and moveto_y is not None:
+                self.x = moveto_x
+                self.y = moveto_y
+            else:
+                raise Exception("Please make both moveto_x and moveto_y either integers of both 'None'")
+        elif self.attack_type == "fire":
+            player_pos = int((player_x + 20) // 40), int((player_y + 20) // 40)
+            fire_pos = [[1, 0], [1, 1], [1, -1], [2, 0], [2, 1], [2, -1], [2, 2], [2, -2]]
+            for i in range(8):
+                try:
+                    self.positions = (player_pos[0] + fire_pos[i][0], player_pos[1] + fire_pos[i][1])
+                except:
+                    pass
     
     def is_touching_player(self, player_x, player_y):
         if ((self.x > player_x and self.x < (player_x + 40)) and (self.y > player_y and self.y < (player_y + 40))) or (((self.x + self.size_width) > player_x and (self.x + self.size_width) < (player_x + 40)) and ((self.y + self.size_hight) > (self.y + self.size_hight) and self.y < (player_y + 40))):
@@ -450,9 +465,17 @@ class weapon:
     
     def is_touching_enemy(self, enemy_x, enemy_y):
         """Check if weapon is touching an enemy"""
-        if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 
-            (self.y < (enemy_y + 40) and (self.y + self.size_hight) > enemy_y)):
-            return True
+        if self.attack_type == "Stab":
+            if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 
+                (self.y < (enemy_y + 40) and (self.y + self.size_hight) > enemy_y)):
+                return True
+        elif self.attack_type == "fire":
+            if self.positions is not None:
+                for i in range(len(self.positions)):
+                    fire_x, fire_y = self.positions[i][0], self.positions[i][1]
+                    if ((fire_x * 40 < (enemy_x + 40) and (fire_x * 40 + 40) > enemy_x) and 
+                        (fire_y * 40 < (enemy_y + 40) and (fire_y * 40 + 40) > enemy_y)):
+                        return True
         return False
     
     def touching(self, block):
