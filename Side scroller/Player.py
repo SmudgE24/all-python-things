@@ -26,7 +26,7 @@ class player:
 
         self.jumpmax = jumpmax
         self.hp = hp
-        self.max_hp = hp
+        self.max_hp = 99
 
         self.inventory = {'armour':[], 
                           'item':[],
@@ -239,14 +239,17 @@ class player:
             return False
 
     def AppendInventory(self, item):
-        """Add item to appropriate inventory section"""
-        if isinstance(item, str):
-            if "Armour" in item or "Shield" in item:
-                self.inventory['armour'].append(item)
-            elif "Sword" in item or "Bow" in item or "Dagger" in item or "Cannon" in item:
-                self.inventory['weapon'].append(item)
+        """Add item to the appropriate inventory section"""
+
+        if isinstance(item, str) and item in Items.ITEMS_DB:
+
+            item_type = Items.ITEMS_DB[item]["type"]
+
+            if item_type in self.inventory:
+                self.inventory[item_type].append(item)
+
             else:
-                self.inventory['item'].append(item)
+                self.inventory["item"].append(item)
     
     def switch_inventory_section(self):
         """Switch to next inventory section"""
@@ -328,7 +331,7 @@ class player:
             effect = item.get_effect()
             
             # Only consumable items can be used
-            if effect in ['heal', 'jump_boost', 'power_boost', 'void_immunity', 'time_freeze', 'explosive']:
+            if effect in ['heal', 'jump_boost', 'power_boost', 'speed_teleport', 'time_freeze', 'explosive']:
                 used = item.apply_effect(self, enemies)
                 if used:
                     items.remove(selected_item)

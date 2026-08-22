@@ -184,10 +184,10 @@ class Item:
             print(f"{self.name} grants void teleportation!")
 
             if player.going_left:
-                for i in range(8):
+                for i in range(80):
                     player.move(True, False)
             else:
-                for i in range(8):
+                for i in range(80):
                     player.move(False, True)
             
             return True
