@@ -316,7 +316,7 @@ class player:
                 return True
         return False
     
-    def use_item(self, enemies=None):
+    def use_item(self):
         section = self.inventory_section
         items = self.inventory[section]
         if not items:
@@ -329,12 +329,11 @@ class player:
             
             # Only consumable items can be used
             if effect in ['heal', 'jump_boost', 'power_boost', 'void_immunity', 'time_freeze', 'explosive']:
-                used = item.apply_effect(self, enemies)
-                if used:
-                    items.remove(selected_item)
-                    self.inventory_index[section] = min(self.inventory_index[section], len(items) - 1) if items else 0
-                    return True
-        except (TypeError, ValueError):
+                item.apply_effect(self)
+                items.remove(selected_item)
+                self.inventory_index[section] = min(self.inventory_index[section], len(items) - 1) if items else 0
+                return True
+        except ValueError:
             pass
         return False
     
@@ -353,13 +352,13 @@ class player:
             self.on_fire = True
             self.on_fire_for = None
 
-    def trigger_explosion(self, enemies):
+    def trigger_explosion(self, Enemies):
         """Trigger an explosion effect around the player"""
         explosion_radius = 80  # 2 blocks in each direction
         explosion_damage = 3
         
         # Check for enemies within the explosion radius
-        for enemy in enemies:
+        for enemy in Enemies.ENEMY_LIST:
             if (abs(enemy.x - self.x) <= explosion_radius and 
                 abs(enemy.y - self.y) <= explosion_radius):
                 enemy.take_damage(explosion_damage)

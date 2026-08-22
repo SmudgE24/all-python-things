@@ -22,7 +22,7 @@ clock = pygame.time.Clock()
 # WORLD
 # ============================================================
 
-WORLD_SIZE = 10
+WORLD_SIZE = 100
 
 world = {}
 

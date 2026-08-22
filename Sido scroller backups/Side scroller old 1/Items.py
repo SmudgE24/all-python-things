@@ -154,19 +154,14 @@ class Item:
     def get_rarity(self):
         return self.properties.get("rarity", "common")
     
-    def apply_effect(self, player, enemies=None):
+    def apply_effect(self, player, enemies):
         """Apply item effects to player"""
         effect = self.get_effect()
         
         if effect == "heal":
             amount = self.properties.get("value", 1)
-            old_hp = player.hp
-            player.hp = min(
-                player.max_hp,
-                player.hp + amount
-            )
-            restored = player.hp - old_hp
-            print(f"{self.name} restored {restored} HP!")
+            player.hp += amount
+            print(f"{self.name} restored {amount} HP!")
             return True
         
         elif effect == "jump_boost":
@@ -200,10 +195,8 @@ class Item:
         
         elif effect == "explosive":
             print(f"{self.name} is ready to explode!")
-            if enemies is not None:
-                player.trigger_explosion(enemies)
-                return True
-            return False
+            player.trigger_explosion(enemies)
+            return True
         
         return False
 

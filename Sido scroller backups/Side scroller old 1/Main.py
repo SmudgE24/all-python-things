@@ -17,10 +17,10 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def start():
-    pygame.init()
-    pygame.font.init()
     icon = pygame.image.load("assets/images/Cover.png")
     pygame.display.set_icon(icon)
+    pygame.init()
+    pygame.font.init()
     screen = pygame.display.set_mode((1280, 720))
     pygame.display.set_caption("Steppefall")
     return screen
@@ -220,7 +220,7 @@ def run(level, levelNo):
                 if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
                     holding_super_attack = True
                 if event.key == pygame.K_c:
-                    player_1.use_item(enemies)
+                    player_1.use_item()
             
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
@@ -238,7 +238,7 @@ def run(level, levelNo):
                 if event.button == 2:  # Middle mouse button
                     player_1.switch_inventory_section()
                 elif event.button == 1:  # Left mouse button to equip
-                    player_1.equip_item(enemies)
+                    player_1.equip_item()
         
         #movement
         keys = pygame.key.get_pressed()
