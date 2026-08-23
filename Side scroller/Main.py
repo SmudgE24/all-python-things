@@ -115,8 +115,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     # Draw game area with inventory panel offset
     screen.fill((0, 0, 0))
 
-    img = pygame.image.load("assets/images/firescene3.jpeg")
-    img = pygame.transform.scale(img, (GAME_WIDTH, 720))
+    img = pygame.image.load("assets/images/firescene2.jpeg")
+    img = pygame.transform.scale(img, (1280, 720))
     screen.blit(img, (0, 0))
     
     # Draw game world shifted right by inventory width
