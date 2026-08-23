@@ -508,3 +508,6 @@ class weapon:
             return True
         if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
             return True
+
+
+        
