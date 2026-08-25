@@ -190,13 +190,15 @@ def death(screen):
 def run(level, levelNo):
     selection = None
     aBoard = Board.board(level)
-    aBoard.find_chest_contents()
+    #          
     screen = start()
+    #          
     player_1 = Player.Pirate(level)
     running = True
+    #          
     clock = pygame.time.Clock()
     ticks = 0
-    lastHp =player_1.hp
+    lastHp = player_1.hp
     pointOfDamage = 21
     dam = False
     a = aBoard.findPoint("S")

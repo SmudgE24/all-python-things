@@ -40,7 +40,7 @@ ITEMS_DB = {
         "description": "Ranged weapon",
         "effect": "ranged"
     },
-    "Flame Gun": {
+    "Flame Thrower": {
         "type": "weapon",
         "damage": 2,
         "attack_speed": 0.8,
@@ -83,24 +83,24 @@ ITEMS_DB = {
         "rarity": "common",
         "description": "Currency"
     },
-    "Jump boots": {
+    "Jump potion": {
         "type": "item",
         "rarity": "uncommon",
         "description": "Extra jump height",
         "effect": "jump_boost"
     },
-    "+1 life": {
-        "type": "item",
-        "value": 1,
-        "rarity": "rare",
-        "description": "Restore 1 HP",
-        "effect": "heal"
-    },
-    "Bottle o' healin": {
+    "+3 life": {
         "type": "item",
         "value": 3,
-        "rarity": "uncommon",
+        "rarity": "very rare",
         "description": "Restore 3 HP",
+        "effect": "heal"
+    },
+    "Healing potion": {
+        "type": "item",
+        "value": 1,
+        "rarity": "uncommon",
+        "description": "Restore 1 HP",
         "effect": "heal"
     },
     "Bomb": {
@@ -162,12 +162,12 @@ class Item:
         effect = self.get_effect()
         
         if effect == "heal":
+            player.max_hp = 99  # Set a maximum HP limit to prevent over-healing
             amount = self.properties.get("value", 1)
             old_hp = player.hp
-            player.hp = min(
-                player.max_hp,
-                player.hp + amount
-            )
+            player.hp += amount
+            if player.hp > player.max_hp:
+                player.hp = player.max_hp
             restored = player.hp - old_hp
             print(f"{self.name} restored {restored} HP!")
             return True
