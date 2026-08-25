@@ -396,7 +396,7 @@ class Pirate(player):
         print(self.equipped)
         print(self.equipped['weapon'])
         attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
-        self.current_attack = weapon((0,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+        self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
     #def use_ability(self):
     
@@ -406,23 +406,29 @@ class Pirate(player):
         if self.super_charged:
             self.super_charged = False
             if self.going_left:
-                self.current_super = weapon((-10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+                self.current_super = weapon((-10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
             else:
-                self.current_super = weapon((10,0), player_x=(self.x+40), player_y=(self.y+40), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+                self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
     def update_attacks(self, holding_attack, holding_super_attack):
         if not holding_attack:
             self.current_attack = None
         if not holding_super_attack:
             self.current_super = None
-        
+        a = False
         if self.current_attack is not None:
             if self.equipped['weapon'] == 'Flame Gun':
-                self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+            elif self.equipped['weapon'] == 'Bow':
+                self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
+                a = self.current_attack.move()
             else:
-                self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
         if self.current_super is not None:
             self.current_super.move()
+
+        if a:
+            self.current_attack = None
     
     def recharge_super(self, coins_gained):
         self.charge_count += coins_gained
@@ -441,6 +447,7 @@ class weapon:
         self.level = level
         self.attack_type = attack_type
         self.positions = None
+        self.expired = False
     
     def move(self, moveto_x=None, moveto_y=None, player_x=None, player_y=None):
         if self.attack_type == "Stab":
@@ -452,6 +459,9 @@ class weapon:
                 self.y = moveto_y
             else:
                 raise Exception("Please make both moveto_x and moveto_y either integers of both 'None'")
+        elif self.attack_type == "ranged":
+            self.x += self.velocity[0]
+            self.y += self.velocity[1]
         elif self.attack_type == "fire":
             player_pos = (
                 int((player_x + 20) // 40),
@@ -476,6 +486,11 @@ class weapon:
                     player_pos[0] + offset_x,
                     player_pos[1] + offset_y
                 ))
+
+        if self.touching("B"):
+            self.expired = True
+        
+        return self.expired
     
     def is_touching_player(self, player_x, player_y):
         if ((self.x > player_x and self.x < (player_x + 40)) and (self.y > player_y and self.y < (player_y + 40))) or (((self.x + self.size_width) > player_x and (self.x + self.size_width) < (player_x + 40)) and ((self.y + self.size_hight) > (self.y + self.size_hight) and self.y < (player_y + 40))):
@@ -488,6 +503,7 @@ class weapon:
         if self.attack_type == "Stab":
             if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 
                 (self.y < (enemy_y + 40) and (self.y + self.size_hight) > enemy_y)):
+                self.expired = True
                 return True
         elif self.attack_type == "fire":
             if self.positions is not None:
@@ -497,6 +513,11 @@ class weapon:
                     if ((fire_x * 40 < (enemy_x + 40) and (fire_x * 40 + 40) > enemy_x) and 
                         (fire_y * 40 < (enemy_y + 40) and (fire_y * 40 + 40) > enemy_y)):
                         return True
+        elif self.attack_type == "ranged":
+            if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 
+                (self.y < (enemy_y + 40) and (self.y + self.size_hight) > enemy_y)):
+                self.expired = True
+                return True
         return False
     
     def touching(self, block):
