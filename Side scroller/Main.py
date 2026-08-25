@@ -12,9 +12,7 @@ import Items
 import sys
 import os
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def start():
     pygame.init()
@@ -187,225 +185,234 @@ def death(screen):
         screen.blit(text, text_rect)
         pygame.display.flip()
 
-def run(level, levelNo):
-    selection = None
-    aBoard = Board.board(level)
-    #          
-    screen = start()
-    #          
-    player_1 = Player.Pirate(level)
-    running = True
-    #          
-    clock = pygame.time.Clock()
-    ticks = 0
-    lastHp = player_1.hp
-    pointOfDamage = 21
-    dam = False
-    a = aBoard.findPoint("S")
-    player_1.x = a[0]
-    player_1.y = a[1]
-    enemies = aBoard.spawn()
-    holding_attack = False
-    holding_super_attack = False
-    while running:
-        #helpfull for stomping on enemies heads
-        player_1.last_x = player_1.x
-        player_1.last_y = player_1.y
-        
-        #events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    player_1.jump()
-                if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
-                    holding_attack = True
-                if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
-                    holding_super_attack = True
-                if event.key == pygame.K_c:
-                    player_1.use_item(enemies)
-            
-            if event.type == pygame.KEYUP:
-                if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
-                    holding_attack = False
-                if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
-                    holding_super_attack = False
-                    
-            if event.type == pygame.MOUSEWHEEL:
-                if event.y > 0:
-                    player_1.scroll_inventory(-1)  # Up scrolls up in list
-                elif event.y < 0:
-                    player_1.scroll_inventory(1)   # Down scrolls down in list
-            
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 2:  # Middle mouse button
-                    player_1.switch_inventory_section()
-                elif event.button == 1:  # Left mouse button to equip
-                    player_1.equip_item(enemies)
-        
-        #movement
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            player_1.move(True, False)
-        if keys[pygame.K_RIGHT]:
-            player_1.move(False, True)
-        
-        #fire
-        player_1.FireTick(ticks)
-        
-        #weapon attacks
-        if holding_attack and player_1.current_attack is None:
-            player_1.attack()
-        if holding_super_attack and player_1.current_super is None and player_1.super_charged:
-            player_1.super_attack()
-        
-        player_1.update_attacks(holding_attack, holding_super_attack)
-        
-        #fall out the world death
-        if player_1.y > len(level) * 40:
-            player_1.hp = 0
-        
-        #collect coins
-        if player_1.collect_coins():
-            player_1.recharge_super(1)
-            
-        #damage flash, no, not that type
-        if player_1.hp < lastHp:
-            dam = True
-            pointOfDamage = 0
-            lastHp = player_1.hp
-        if pointOfDamage <= 20 and dam:
-            pointOfDamage += 1
-        if pointOfDamage > 20:
-            pointOfDamage = 21
-            dam = False
-        
-        #player death
-        if player_1.death():
-            death(screen)
-            return False
-        
-        #End level
-        if player_1.is_on_wall(block="E", Or=True):
-            level_complete(screen, levelNo)
-            running = False
-        
-        #player gravity
-        player_1.update_vy()
-
-        if player_1.timefrozen:
-            if player_1.timefrozenat is None:
-                player_1.timefrozenat = ticks
-            elif ticks - player_1.timefrozenat >= (40 * 15):  # 15 seconds at 40 ticks per second
-                player_1.timefrozen = False
-                player_1.timefrozenat = None
-
-        if not player_1.timefrozen:
-            #enemy updates
-            i = 0
-            while i < len(enemies):
-                enemy = enemies[i]
-            
-                enemy.update_vy()
-                enemy.move(ticks)
-            
-                # Check weapon hits
-                hit_by_weapon = False
-                weapon_damage = player_1.damage
-                
-                # Add weapon damage if equipped
-                if player_1.equipped.get('weapon'):
-                    try:
-                        weapon_item = Items.Item(player_1.equipped['weapon'])
-                        weapon_damage += weapon_item.get_damage()
-                    except:
-                        pass
-                
-                if player_1.current_attack is not None:
-                    if player_1.current_attack.is_touching_enemy(enemy.x, enemy.y):
-                        enemy.take_damage(weapon_damage)
-                        player_1.coins += 5
-                        if enemy.hp <= 0:
-                            hit_by_weapon = True
-                
-                if player_1.current_super is not None:
-                    if player_1.current_super.is_touching_enemy(enemy.x, enemy.y):
-                        enemy.take_damage(weapon_damage * 2)
-                        player_1.coins += 10
-                        if enemy.hp <= 0:
-                            hit_by_weapon = True
-                
-                if hit_by_weapon:
-                    enemies.pop(i)
-                    continue
-            
-                result = enemy.isTouchingPlayer(player_1)
-            
-                if result == "stomp":
-                    player_1.vy = -10
-                    player_1.coins += 3
-                    enemies.pop(i)
-                    continue
-            
-                elif result == "hit":
-                    player_1.take_damage(1)
-                    enemies.pop(i)
-                    continue
-
-                if enemy.hp <= 0:
-                    enemies.pop(i)
-                    continue
-            
-                i += 1
-        
-        #open chests
-        a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
-        for i in range(len(a)):
-            try:
-                if level[a[i][1]][a[i][0]] == "H":
-                    aBoard.setPoint(a[i][0], a[i][1], tile=".")
-                    contents = aBoard.find_chest_contents()
-                    if contents[0] == "10 Coins":
-                        player_1.coins += 10
-                    else:
-                        player_1.AppendInventory(contents[0])
-                    if contents[1] == "10 Coins":
-                        player_1.coins += 10
-                    else:
-                        player_1.AppendInventory(contents[1])
-            except IndexError:
-                print("Player is out of bounds, but this should not happen. Killing the player to prevent further issues.")
-                player_1.hp = 0
-            except Exception as e:
-                print(f"An unexpected error occurred while checking for chests: {e}")
-        
-        # Prepare inventory data for display
-        inventory_data = {
-            'section': player_1.inventory_section,
-            'items': player_1.inventory[player_1.inventory_section],
-            'index': player_1.inventory_index[player_1.inventory_section]
-        }
-        
-        screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
-        pygame.display.flip()
-        clock.tick(40)
-        ticks += 1
-    return True
-
-levelNo = 1
-while True:
-    num = str(levelNo)
+def run():
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
-    with open(
-        os.path.join(BASE_DIR, 'assets', 'levels', f'level{levelNo}.txt'),
-        'r'
-    ) as file:
-        level = [list(line.rstrip('\r\n')) for line in file]
-    if run(level, levelNo):
-        levelNo += 1
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))   
 
-    else:
-        levelNo = 1
+    levelNo = 1
+    screen = start()    
+    level = [24, 24]
+    player_1 = Player.Pirate(level)
+    clock = pygame.time.Clock()
+
+    while True:
+        num = str(levelNo)
+        
+        with open(
+            os.path.join(BASE_DIR, 'assets', 'levels', f'level{levelNo}.txt'),
+            'r'
+        ) as file:
+            level = [list(line.rstrip('\r\n')) for line in file]
+        
+        player_1.level = level
+        won = None
+        running = True
+        aBoard = Board.board(level)
+        ticks = 0
+        lastHp = player_1.hp
+        pointOfDamage = 21
+        dam = False
+        a = aBoard.findPoint("S")
+        player_1.x = a[0]
+        player_1.y = a[1]
+        enemies = aBoard.spawn()
+        holding_attack = False
+        holding_super_attack = False
+        while running:
+            #helpfull for stomping on enemies heads
+            player_1.last_x = player_1.x
+            player_1.last_y = player_1.y
+            
+            #events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()                    
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        player_1.jump()
+                    if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
+                        holding_attack = True
+                    if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
+                        holding_super_attack = True
+                    if event.key == pygame.K_c:
+                        player_1.use_item(enemies)
+                    
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
+                        holding_attack = False
+                    if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
+                        holding_super_attack = False
+                            
+                if event.type == pygame.MOUSEWHEEL:
+                    if event.y > 0:
+                        player_1.scroll_inventory(-1)  # Up scrolls up in list
+                    elif event.y < 0:
+                        player_1.scroll_inventory(1)   # Down scrolls down in list
+                    
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 2:  # Middle mouse button
+                        player_1.switch_inventory_section()
+                    elif event.button == 1:  # Left mouse button to equip
+                        player_1.equip_item(enemies)
+                
+            #movement
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT]:
+                player_1.move(True, False)
+            if keys[pygame.K_RIGHT]:
+                player_1.move(False, True)
+            
+            #fire
+            player_1.FireTick(ticks)
+            
+            #weapon attacks
+            if holding_attack and player_1.current_attack is None:
+                player_1.attack()
+            if holding_super_attack and player_1.current_super is None and player_1.super_charged:
+                player_1.super_attack()
+            
+            player_1.update_attacks(holding_attack, holding_super_attack)
+            
+            #fall out the world death
+            if player_1.y > len(level) * 40:
+                player_1.hp = 0
+            
+            #collect coins
+            if player_1.collect_coins():
+                player_1.recharge_super(1)
+                
+            #damage flash, no, not that type
+            if player_1.hp < lastHp:
+                dam = True
+                pointOfDamage = 0
+                lastHp = player_1.hp
+            if pointOfDamage <= 20 and dam:
+                pointOfDamage += 1
+            if pointOfDamage > 20:
+                pointOfDamage = 21
+                dam = False
+            
+            #player death
+            if player_1.death():
+                death(screen)
+                won = False
+            
+            #End level
+            if player_1.is_on_wall(block="E", Or=True):
+                level_complete(screen, levelNo)
+                running = False
+            
+            #player gravity
+            player_1.update_vy()
+    
+            if player_1.timefrozen:
+                if player_1.timefrozenat is None:
+                    player_1.timefrozenat = ticks
+                elif ticks - player_1.timefrozenat >= (40 * 15):  # 15 seconds at 40 ticks per second
+                    player_1.timefrozen = False
+                    player_1.timefrozenat = None
+    
+            if not player_1.timefrozen:
+                #enemy updates
+                i = 0
+                while i < len(enemies):
+                    enemy = enemies[i]
+                
+                    enemy.update_vy()
+                    enemy.move(ticks)
+                
+                    # Check weapon hits
+                    hit_by_weapon = False
+                    weapon_damage = player_1.damage
+                    
+                    # Add weapon damage if equipped
+                    if player_1.equipped.get('weapon'):
+                        try:
+                            weapon_item = Items.Item(player_1.equipped['weapon'])
+                            weapon_damage += weapon_item.get_damage()
+                        except:
+                            pass
+                    
+                    if player_1.current_attack is not None:
+                        if player_1.current_attack.is_touching_enemy(enemy.x, enemy.y):
+                            enemy.take_damage(weapon_damage)
+                            player_1.coins += 5
+                            if enemy.hp <= 0:
+                                hit_by_weapon = True
+                    
+                    if player_1.current_super is not None:
+                        if player_1.current_super.is_touching_enemy(enemy.x, enemy.y):
+                            enemy.take_damage(weapon_damage * 2)
+                            player_1.coins += 10
+                            if enemy.hp <= 0:
+                                hit_by_weapon = True
+                    
+                    if hit_by_weapon:
+                        enemies.pop(i)
+                        continue
+                
+                    result = enemy.isTouchingPlayer(player_1)
+                
+                    if result == "stomp":
+                        player_1.vy = -10
+                        player_1.coins += 3
+                        enemies.pop(i)
+                        continue
+                
+                    elif result == "hit":
+                        player_1.take_damage(1)
+                        enemies.pop(i)
+                        continue
+    
+                    if enemy.hp <= 0:
+                        enemies.pop(i)
+                        continue
+                
+                    i += 1
+            
+            #open chests
+            a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
+            for i in range(len(a)):
+                try:
+                    if level[a[i][1]][a[i][0]] == "H":
+                        aBoard.setPoint(a[i][0], a[i][1], tile=".")
+                        contents = aBoard.find_chest_contents()
+                        if contents[0] == "10 Coins":
+                            player_1.coins += 10
+                        else:
+                            player_1.AppendInventory(contents[0])
+                        if contents[1] == "10 Coins":
+                            player_1.coins += 10
+                        else:
+                            player_1.AppendInventory(contents[1])
+                except IndexError:
+                    print("Player is out of bounds, but this should not happen. Killing the player to prevent further issues.")
+                    player_1.hp = 0
+                except Exception as e:
+                    print(f"An unexpected error occurred while checking for chests: {e}")
+            
+            # Prepare inventory data for display
+            inventory_data = {
+                'section': player_1.inventory_section,
+                'items': player_1.inventory[player_1.inventory_section],
+                'index': player_1.inventory_index[player_1.inventory_section]
+            }
+            
+            screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
+            pygame.display.flip()
+            clock.tick(40)
+            ticks += 1
+
+            if won is not None:
+                running = False
+        if won is not False:
+            won = True
+    
+        if won:
+            levelNo += 1
+        else:
+            levelNo = 1
+
+run()
