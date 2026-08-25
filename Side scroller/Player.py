@@ -521,13 +521,17 @@ class weapon:
         return False
     
     def touching(self, block):
-        if self.level[self.y // 40][self.x // 40] == block:
-            return True
-        if self.level[(self.y + self.size_hight) // 40][self.x // 40] == block:
-            return True
-        if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
-            return True
-        if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
+        try:
+            if self.level[self.y // 40][self.x // 40] == block:
+                return True
+            if self.level[(self.y + self.size_hight) // 40][self.x // 40] == block:
+                return True
+            if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
+                return True
+            if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
+                return True
+            return False
+        except IndexError:
             return True
 
 
