@@ -883,7 +883,7 @@ def death(screen):
                 if event.key == pygame.K_SPACE:
                     menue = False
                     quitting = [True, False, False]
-                if event.key == pygame.ESCAPE:
+                if event.key == pygame.K_ESCAPE:
                     menue = False
                     quitting = [False, False, False]
         font = pygame.font.SysFont(None, 60)  # Default font, size 60
