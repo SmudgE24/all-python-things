@@ -1,0 +1,1871 @@
+import pygame
+import math
+
+pygame.init()
+
+start_time = pygame.time.get_ticks()
+
+# ============================================================
+# WINDOW
+# ============================================================
+
+WIDTH = 1200
+HEIGHT = 800
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Steppefall 3D Prototype")
+
+clock = pygame.time.Clock()
+
+
+# ============================================================
+# WORLD
+# ============================================================
+
+WORLD_SIZE = 100
+
+world = {}
+
+for x in range(WORLD_SIZE):
+
+    for y in range(WORLD_SIZE):
+
+        if x == y == 5:
+
+            world[(x, y, 0)] = "stone"
+            world[(x, y, 1)] = "dirt"
+            world[(x, y, 2)] = "water"
+
+        else:
+
+            world[(x, y, 0)] = "stone"
+            world[(x, y, 1)] = "dirt"
+            world[(x, y, 2)] = "grass"
+
+
+# ============================================================
+# PLAYER
+# ============================================================
+
+player = pygame.Vector3(
+    WORLD_SIZE / 2,
+    WORLD_SIZE / 2,
+    WORLD_SIZE
+)
+
+PLAYER_SPEED = 5
+PLAYER_HEIGHT = 0.6
+PLAYER_WIDTH = 0.6
+
+GRAVITY = -20
+JUMP_SPEED = 8
+
+vertical_velocity = 0
+on_ground = False
+in_water = False
+
+spawn_position = player.copy()
+
+
+# ============================================================
+# CAMERA
+# ============================================================
+
+camera_yaw = math.radians(45)
+camera_pitch = math.radians(35)
+
+# True  = first person
+# False = third person
+
+# Start in first person, with third person available.
+first_person = True
+
+# Independent third-person camera.
+
+third_person_camera = pygame.Vector3(
+    WORLD_SIZE / 2,
+    WORLD_SIZE / 2,
+    WORLD_SIZE - 1
+)
+
+CAMERA_SPEED = 8
+
+mouse_dragging = False
+last_mouse_position = pygame.Vector2()
+
+
+# ============================================================
+# 3D CUBE
+# ============================================================
+
+cube_vertices = [
+
+    (0, 0, 0),
+    (1, 0, 0),
+    (1, 1, 0),
+    (0, 1, 0),
+
+    (0, 0, 1),
+    (1, 0, 1),
+    (1, 1, 1),
+    (0, 1, 1)
+
+]
+
+
+cube_faces = [
+
+    # bottom
+    (0, 3, 2, 1),
+
+    # top
+    (4, 5, 6, 7),
+
+    # front
+    (0, 1, 5, 4),
+
+    # right
+    (1, 2, 6, 5),
+
+    # back
+    (2, 3, 7, 6),
+
+    # left
+    (3, 0, 4, 7)
+
+]
+
+
+# ============================================================
+# BLOCK COLOURS
+# ============================================================
+
+block_colours = {
+
+    "dirt": [
+
+        (120, 80, 40),
+        (140, 90, 45),
+        (110, 70, 35),
+        (130, 85, 40),
+        (100, 65, 30),
+        (115, 75, 35)
+
+    ],
+
+    "grass": [
+
+        (60, 150, 60),
+        (70, 170, 70),
+        (50, 130, 50),
+        (65, 160, 65),
+        (45, 120, 45),
+        (55, 140, 55)
+
+    ],
+
+    "stone": [
+
+        (110, 110, 110),
+        (130, 130, 130),
+        (90, 90, 90),
+        (120, 120, 120),
+        (80, 80, 80),
+        (100, 100, 100)
+
+    ],
+
+    "water": [
+
+        (40, 120, 200),
+        (50, 140, 220),
+        (30, 100, 180),
+        (45, 130, 210),
+        (25, 90, 165),
+        (35, 110, 190)
+
+    ],
+
+}
+
+
+# ============================================================
+# CAMERA POSITION
+# ============================================================
+
+def get_camera_position():
+
+    if first_person:
+
+        return pygame.Vector3(
+            player.x,
+            player.y,
+            player.z + PLAYER_HEIGHT * 0.8
+        )
+
+    else:
+
+        return third_person_camera.copy()
+
+
+# ============================================================
+# WORLD → CAMERA SPACE
+# ============================================================
+
+def world_to_camera(
+    point,
+    camera_position
+):
+
+    point = pygame.Vector3(point)
+
+    relative = (
+        point -
+        camera_position
+    )
+
+    # Camera forward direction.
+
+    forward = pygame.Vector3(
+
+        -math.cos(camera_pitch) *
+        math.cos(camera_yaw),
+
+        -math.cos(camera_pitch) *
+        math.sin(camera_yaw),
+
+        math.sin(camera_pitch)
+
+    )
+
+    forward.normalize()
+
+    # World up.
+
+    world_up = pygame.Vector3(
+        0,
+        0,
+        1
+    )
+
+    # Camera right.
+
+    right = forward.cross(
+        world_up
+    )
+
+    if right.length_squared() == 0:
+
+        right = pygame.Vector3(
+            1,
+            0,
+            0
+        )
+
+    else:
+
+        right.normalize()
+
+    # Camera up.
+
+    up = right.cross(
+        forward
+    )
+
+    up.normalize()
+
+    camera_x = relative.dot(
+        right
+    )
+
+    camera_y = relative.dot(
+        up
+    )
+
+    camera_z = relative.dot(
+        forward
+    )
+
+    return pygame.Vector3(
+
+        camera_x,
+        camera_y,
+        camera_z
+
+    )
+
+
+# ============================================================
+# 3D → 2D PROJECTION
+# ============================================================
+
+FOCAL_LENGTH = 700
+
+# Only used to prevent division by a number
+# extremely close to zero.
+
+NEAR_PLANE = 0.10
+
+
+def project(
+    point,
+    camera_position
+):
+
+    camera_point = world_to_camera(
+
+        point,
+        camera_position
+
+    )
+
+    # Behind camera.
+
+    if camera_point.z <= NEAR_PLANE:
+
+        return None
+
+    screen_x = (
+
+        WIDTH / 2
+        +
+        camera_point.x /
+        camera_point.z *
+        FOCAL_LENGTH
+
+    )
+
+    screen_y = (
+
+        HEIGHT / 2
+        -
+        camera_point.y /
+        camera_point.z *
+        FOCAL_LENGTH
+
+    )
+
+    return (
+
+        pygame.Vector2(
+            screen_x,
+            screen_y
+        ),
+
+        camera_point.z
+
+    )
+
+
+# ============================================================
+# CLIP POLYGON TO NEAR PLANE
+# ============================================================
+
+def clip_camera_polygon(
+    points
+):
+    clipped = []
+    previous = points[-1]
+    previous_inside = previous.z > NEAR_PLANE
+    for current in points:
+        current_inside = current.z > NEAR_PLANE
+        if current_inside != previous_inside:
+            distance = current.z - previous.z
+            if distance != 0:
+                amount = (
+                    NEAR_PLANE - previous.z
+                ) / distance
+                clipped.append(
+                    previous + (current - previous) * amount
+                )
+        if current_inside:
+            clipped.append(current)
+        previous = current
+        previous_inside = current_inside
+    return clipped
+
+
+def project_camera_point(
+    camera_point
+):
+    screen_x = (
+        WIDTH / 2
+        + camera_point.x /
+        camera_point.z *
+        FOCAL_LENGTH
+    )
+    screen_y = (
+        HEIGHT / 2
+        - camera_point.y /
+        camera_point.z *
+        FOCAL_LENGTH
+    )
+    return pygame.Vector2(
+        screen_x,
+        screen_y
+    )
+
+
+# ============================================================
+# GET CUBE VERTICES
+# ============================================================
+
+def get_cube_vertices(
+    x,
+    y,
+    z
+):
+
+    vertices = []
+
+    for vx, vy, vz in cube_vertices:
+
+        vertices.append(
+
+            pygame.Vector3(
+
+                x + vx,
+                y + vy,
+                z + vz
+
+            )
+
+        )
+
+    return vertices
+
+
+# ============================================================
+# FACE NORMAL
+# ============================================================
+
+def get_face_normal(
+    vertices,
+    face
+):
+
+    a = vertices[
+        face[0]
+    ]
+
+    b = vertices[
+        face[1]
+    ]
+
+    c = vertices[
+        face[2]
+    ]
+
+    edge1 = b - a
+    edge2 = c - a
+
+    return edge1.cross(
+        edge2
+    )
+
+
+# ============================================================
+# DRAW WORLD
+# ============================================================
+
+def draw_world(
+    camera_position
+):
+
+    faces_to_draw = []
+
+    for (
+        x,
+        y,
+        z
+    ), block in world.items():
+
+        vertices = get_cube_vertices(
+
+            x,
+            y,
+            z
+
+        )
+
+        for (
+            face_number,
+            face
+        ) in enumerate(
+            cube_faces
+        ):
+
+            # ------------------------------------------------
+            # Don't draw faces hidden inside another block.
+            # ------------------------------------------------
+
+            if face_number == 0:
+
+                neighbour = (
+
+                    x,
+                    y,
+                    z - 1
+
+                )
+
+            elif face_number == 1:
+
+                neighbour = (
+
+                    x,
+                    y,
+                    z + 1
+
+                )
+
+            elif face_number == 2:
+
+                neighbour = (
+
+                    x,
+                    y - 1,
+                    z
+
+                )
+
+            elif face_number == 3:
+
+                neighbour = (
+
+                    x + 1,
+                    y,
+                    z
+
+                )
+
+            elif face_number == 4:
+
+                neighbour = (
+
+                    x,
+                    y + 1,
+                    z
+
+                )
+
+            else:
+
+                neighbour = (
+
+                    x - 1,
+                    y,
+                    z
+
+                )
+
+            if neighbour in world:
+
+                continue
+
+            # ------------------------------------------------
+            # Back-face culling
+            # ------------------------------------------------
+
+            normal = get_face_normal(
+
+                vertices,
+                face
+
+            )
+
+            centre = pygame.Vector3()
+
+            for index in face:
+
+                centre += vertices[
+                    index
+                ]
+
+            centre /= 4
+
+            to_camera = (
+
+                camera_position -
+                centre
+
+            )
+
+            if normal.dot(
+                to_camera
+            ) <= 0:
+
+                continue
+
+            # ------------------------------------------------
+            # Clip faces that cross the near plane instead of
+            # dropping the whole face at the screen edges.
+            # ------------------------------------------------
+            camera_points = []
+            for index in face:
+                camera_points.append(
+                    world_to_camera(
+                        vertices[index],
+                        camera_position
+                    )
+                )
+            camera_points = clip_camera_polygon(
+                camera_points
+            )
+            if len(camera_points) < 3:
+                continue
+            projected_points = []
+            depths = []
+            for camera_point in camera_points:
+                projected_points.append(
+                    project_camera_point(
+                        camera_point
+                    )
+                )
+                depths.append(
+                    camera_point.z
+                )
+            # ------------------------------------------------
+            # Average depth
+            # ------------------------------------------------
+            average_depth = (
+                sum(depths) /
+                len(depths)
+            )
+
+            faces_to_draw.append(
+
+                (
+
+                    average_depth,
+                    block,
+                    face_number,
+                    projected_points
+
+                )
+
+            )
+
+    # ========================================================
+    # FAR → NEAR
+    # ========================================================
+
+    faces_to_draw.sort(
+
+        key=lambda item: item[0],
+        reverse=True
+
+    )
+
+    # ========================================================
+    # DRAW
+    # ========================================================
+
+    for (
+
+        depth,
+        block,
+        face_number,
+        points
+
+    ) in faces_to_draw:
+
+        colour = block_colours[
+            block
+        ][
+            face_number
+        ]
+
+        pygame.draw.polygon(
+
+            screen,
+            colour,
+            points
+
+        )
+
+        pygame.draw.polygon(
+
+            screen,
+            (35, 25, 15),
+            points,
+            1
+
+        )
+
+
+# ============================================================
+# DRAW PLAYER
+# ============================================================
+
+def draw_player(
+    camera_position
+):
+
+    size = PLAYER_WIDTH
+
+    x = (
+        player.x -
+        size / 2
+    )
+
+    y = (
+        player.y -
+        size / 2
+    )
+
+    z = player.z
+
+    vertices = [
+
+        pygame.Vector3(
+            x,
+            y,
+            z
+        ),
+
+        pygame.Vector3(
+            x + size,
+            y,
+            z
+        ),
+
+        pygame.Vector3(
+            x + size,
+            y + size,
+            z
+        ),
+
+        pygame.Vector3(
+            x,
+            y + size,
+            z
+        ),
+
+        pygame.Vector3(
+            x,
+            y,
+            z + size
+        ),
+
+        pygame.Vector3(
+            x + size,
+            y,
+            z + size
+        ),
+
+        pygame.Vector3(
+            x + size,
+            y + size,
+            z + size
+        ),
+
+        pygame.Vector3(
+            x,
+            y + size,
+            z + size
+        )
+
+    ]
+
+    faces_to_draw = []
+
+    player_colours = [
+
+        (20, 50, 120),
+        (70, 150, 255),
+        (45, 110, 220),
+        (35, 90, 190),
+        (30, 75, 160),
+        (50, 120, 230)
+
+    ]
+
+    for (
+        face_number,
+        face
+    ) in enumerate(
+        cube_faces
+    ):
+
+        normal = get_face_normal(
+
+            vertices,
+            face
+
+        )
+
+        centre = pygame.Vector3()
+
+        for index in face:
+
+            centre += vertices[
+                index
+            ]
+
+        centre /= 4
+
+        to_camera = (
+
+            camera_position -
+            centre
+
+        )
+
+        if normal.dot(
+            to_camera
+        ) <= 0:
+
+            continue
+
+        points = []
+
+        depths = []
+
+        valid = True
+
+        for index in face:
+
+            result = project(
+
+                vertices[index],
+                camera_position
+
+            )
+
+            if result is None:
+
+                valid = False
+
+                break
+
+            point, depth = result
+
+            points.append(
+                point
+            )
+
+            depths.append(
+                depth
+            )
+
+        if not valid:
+
+            continue
+
+        faces_to_draw.append(
+
+            (
+
+                sum(depths) /
+                len(depths),
+
+                face_number,
+                points
+
+            )
+
+        )
+
+    faces_to_draw.sort(
+
+        key=lambda item: item[0],
+        reverse=True
+
+    )
+
+    for (
+
+        depth,
+        face_number,
+        points
+
+    ) in faces_to_draw:
+
+        pygame.draw.polygon(
+
+            screen,
+            player_colours[
+                face_number
+            ],
+            points
+
+        )
+
+        pygame.draw.polygon(
+
+            screen,
+            (10, 20, 40),
+            points,
+            1
+
+        )
+
+
+# ============================================================
+# PLAYER COLLISION
+# ============================================================
+
+def player_overlaps_block(
+    position,
+    block_position,
+    allow_water=False
+):
+
+    half_width = (
+        PLAYER_WIDTH / 2
+    )
+
+    player_min_x = (
+        position.x -
+        half_width
+    )
+
+    player_max_x = (
+        position.x +
+        half_width
+    )
+
+    player_min_y = (
+        position.y -
+        half_width
+    )
+
+    player_max_y = (
+        position.y +
+        half_width
+    )
+
+    player_min_z = position.z
+
+    player_max_z = (
+
+        position.z +
+        PLAYER_HEIGHT
+
+    )
+
+    block_x, block_y, block_z = (
+        block_position
+    )
+
+    # Allow passing through water if allow_water is True
+    if allow_water and block_position in world and world[block_position] == "water":
+        return False
+
+    return (
+
+        player_max_x > block_x
+        and
+        player_min_x < block_x + 1
+
+        and
+
+        player_max_y > block_y
+        and
+        player_min_y < block_y + 1
+
+        and
+
+        player_max_z > block_z
+        and
+        player_min_z < block_z + 1
+
+    )
+
+
+# ============================================================
+# HORIZONTAL PLAYER MOVEMENT
+# ============================================================
+
+def move_player_horizontal(
+    axis,
+    amount
+):
+
+    global player
+
+    new_position = player.copy()
+
+    if axis == "x":
+
+        new_position.x += amount
+
+    else:
+
+        new_position.y += amount
+
+    half_width = (
+        PLAYER_WIDTH / 2
+    )
+
+    min_x = (
+
+        math.floor(
+
+            new_position.x -
+            half_width
+
+        ) - 1
+
+    )
+
+    max_x = (
+
+        math.floor(
+
+            new_position.x +
+            half_width
+
+        ) + 1
+
+    )
+
+    min_y = (
+
+        math.floor(
+
+            new_position.y -
+            half_width
+
+        ) - 1
+
+    )
+
+    max_y = (
+
+        math.floor(
+
+            new_position.y +
+            half_width
+
+        ) + 1
+
+    )
+
+    min_z = (
+
+        math.floor(
+            new_position.z
+        ) - 1
+
+    )
+
+    max_z = (
+
+        math.floor(
+
+            new_position.z +
+            PLAYER_HEIGHT
+
+        ) + 1
+
+    )
+
+    for x in range(
+        min_x,
+        max_x + 1
+    ):
+
+        for y in range(
+            min_y,
+            max_y + 1
+    ):
+
+            for z in range(
+                min_z,
+                max_z + 1
+            ):
+
+                if (
+                    x,
+                    y,
+                    z
+                ) not in world:
+
+                    continue
+
+                if player_overlaps_block(
+
+                    new_position,
+                    (x, y, z),
+                    allow_water=True
+
+                ):
+
+                    return
+
+    player = new_position
+
+
+# ============================================================
+# VERTICAL PLAYER MOVEMENT
+# ============================================================
+
+def move_player_vertical(
+    amount
+):
+
+    global player
+    global vertical_velocity
+    global on_ground
+
+    new_position = player.copy()
+
+    new_position.z += amount
+
+    half_width = (
+        PLAYER_WIDTH / 2
+    )
+
+    min_x = (
+
+        math.floor(
+
+            new_position.x -
+            half_width
+
+        ) - 1
+
+    )
+
+    max_x = (
+
+        math.floor(
+
+            new_position.x +
+            half_width
+
+        ) + 1
+
+    )
+
+    min_y = (
+
+        math.floor(
+
+            new_position.y -
+            half_width
+
+        ) - 1
+
+    )
+
+    max_y = (
+
+        math.floor(
+
+            new_position.y +
+            half_width
+
+        ) + 1
+
+    )
+
+    min_z = (
+
+        math.floor(
+            new_position.z
+        ) - 1
+
+    )
+
+    max_z = (
+
+        math.floor(
+
+            new_position.z +
+            PLAYER_HEIGHT
+
+        ) + 1
+
+    )
+
+    for x in range(
+        min_x,
+        max_x + 1
+    ):
+
+        for y in range(
+            min_y,
+            max_y + 1
+        ):
+
+            for z in range(
+                min_z,
+                max_z + 1
+            ):
+
+                if (
+                    x,
+                    y,
+                    z
+                ) not in world:
+
+                    continue
+
+                if player_overlaps_block(
+
+                    new_position,
+                    (x, y, z),
+                    allow_water=True
+
+                ):
+
+                    # Falling.
+
+                    if vertical_velocity <= 0:
+
+                        player.z = (
+                            z + 1
+                        )
+
+                        vertical_velocity = 0
+
+                        on_ground = True
+
+                        return
+
+                    # Jumping into ceiling.
+
+                    else:
+
+                        player.z = (
+
+                            z -
+                            PLAYER_HEIGHT
+
+                        )
+
+                        vertical_velocity = 0
+
+                        return
+
+    player = new_position
+
+    on_ground = False
+
+
+# ============================================================
+# CHECK IF PLAYER IN WATER
+# ============================================================
+
+def update_in_water():
+    global in_water
+    
+    # Check if player's center is inside a water block
+    player_block_x = int(player.x)
+    player_block_y = int(player.y)
+    player_block_z = int(player.z)
+    
+    # Check center of player
+    if (player_block_x, player_block_y, player_block_z) in world:
+        if world[(player_block_x, player_block_y, player_block_z)] == "water":
+            in_water = True
+            return
+    
+    # Check top of player
+    player_block_z_top = int(player.z + PLAYER_HEIGHT)
+    if (player_block_x, player_block_y, player_block_z_top) in world:
+        if world[(player_block_x, player_block_y, player_block_z_top)] == "water":
+            in_water = True
+            return
+    
+    in_water = False
+
+
+# ============================================================
+# PLAYER PHYSICS
+# ============================================================
+
+def update_player_physics(
+    dt
+):
+
+    global vertical_velocity
+    global on_ground
+
+    keys = pygame.key.get_pressed()
+
+    movement = pygame.Vector3()
+
+    # Player movement uses camera yaw.
+
+    forward = pygame.Vector3(
+
+        -math.cos(camera_yaw),
+        -math.sin(camera_yaw),
+        0
+
+    )
+
+    right = pygame.Vector3(
+
+        -math.sin(camera_yaw),
+        math.cos(camera_yaw),
+        0
+
+    )
+
+    if keys[pygame.K_w]:
+
+        movement += forward
+
+    if keys[pygame.K_s]:
+
+        movement -= forward
+
+    if keys[pygame.K_d]:
+
+        movement += right
+
+    if keys[pygame.K_a]:
+
+        movement -= right
+
+    if movement.length_squared() > 0:
+
+        movement.normalize()
+
+        move_player_horizontal(
+
+            "x",
+
+            movement.x *
+            PLAYER_SPEED *
+            dt
+
+        )
+
+        move_player_horizontal(
+
+            "y",
+
+            movement.y *
+            PLAYER_SPEED *
+            dt
+
+        )
+
+    # Jump.
+
+    if (
+        keys[pygame.K_SPACE]
+        and
+        on_ground
+    ):
+
+        vertical_velocity = (
+            JUMP_SPEED
+        )
+
+        on_ground = False
+
+    # Gravity.
+
+    vertical_velocity += (
+
+        GRAVITY *
+        dt
+
+    )
+
+    move_player_vertical(
+
+        vertical_velocity *
+        dt
+
+    )
+
+    # Update water state
+    update_in_water()
+
+    # Respawn.
+
+    if player.z < -20:
+
+        player.update(
+            spawn_position
+        )
+
+        vertical_velocity = 0
+
+        on_ground = False
+
+
+# ============================================================
+# CAMERA COLLISION
+# ============================================================
+
+def camera_overlaps_block(
+    position,
+    block_position
+):
+    """Check if camera overlaps with a solid block (not water)"""
+    # Camera is a point, use small radius for collision
+    camera_radius = 0.3
+    
+    block_x, block_y, block_z = block_position
+    
+    # Check if camera is inside block bounds
+    if (position.x > block_x - camera_radius and
+        position.x < block_x + 1 + camera_radius and
+        position.y > block_y - camera_radius and
+        position.y < block_y + 1 + camera_radius and
+        position.z > block_z - camera_radius and
+        position.z < block_z + 1 + camera_radius):
+        return True
+    return False
+
+
+def move_camera_with_collision(
+    new_position
+):
+    """Move camera while checking for block collisions"""
+    # Check nearby blocks
+    min_x = math.floor(new_position.x) - 1
+    max_x = math.floor(new_position.x) + 1
+    min_y = math.floor(new_position.y) - 1
+    max_y = math.floor(new_position.y) + 1
+    min_z = math.floor(new_position.z) - 1
+    max_z = math.floor(new_position.z) + 1
+    
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
+            for z in range(min_z, max_z + 1):
+                if (x, y, z) not in world:
+                    continue
+                # Water blocks don't collide with camera
+                if world[(x, y, z)] == "water":
+                    continue
+                if camera_overlaps_block(new_position, (x, y, z)):
+                    return False
+    
+    return True
+
+
+# ============================================================
+# THIRD-PERSON CAMERA
+# ============================================================
+
+def update_third_person_camera(
+    dt
+):
+
+    global third_person_camera
+
+    keys = pygame.key.get_pressed()
+
+    movement = pygame.Vector3()
+
+    # Camera horizontal forward.
+
+    forward = pygame.Vector3(
+
+        -math.cos(camera_yaw),
+        -math.sin(camera_yaw),
+        0
+
+    )
+
+    # Camera horizontal right.
+
+    right = pygame.Vector3(
+
+        -math.sin(camera_yaw),
+        math.cos(camera_yaw),
+        0
+
+    )
+
+    if keys[pygame.K_w]:
+
+        movement += forward
+
+    if keys[pygame.K_s]:
+
+        movement -= forward
+
+    if keys[pygame.K_d]:
+
+        movement += right
+
+    if keys[pygame.K_a]:
+
+        movement -= right
+
+    # Vertical camera movement.
+
+    if keys[pygame.K_SPACE]:
+
+        movement.z += 1
+
+    if keys[pygame.K_LSHIFT]:
+
+        movement.z -= 1
+
+    if movement.length_squared() > 0:
+
+        movement.normalize()
+        
+        new_camera_pos = third_person_camera + (
+            movement *
+            CAMERA_SPEED *
+            dt
+        )
+        
+        # Check collision with blocks
+        if move_camera_with_collision(new_camera_pos):
+            third_person_camera = new_camera_pos
+
+    # Keep camera at/inside world edges.
+
+    CAMERA_MARGIN = 0.05
+
+    third_person_camera.x = max(
+
+        -CAMERA_MARGIN,
+
+        min(
+
+            WORLD_SIZE +
+            CAMERA_MARGIN,
+
+            third_person_camera.x
+
+        )
+
+    )
+
+    third_person_camera.y = max(
+
+        -CAMERA_MARGIN,
+
+        min(
+
+            WORLD_SIZE +
+            CAMERA_MARGIN,
+
+            third_person_camera.y
+
+        )
+
+    )
+
+    third_person_camera.z = max(
+
+        -CAMERA_MARGIN,
+
+        min(
+
+            WORLD_SIZE +
+            CAMERA_MARGIN,
+
+            third_person_camera.z
+
+        )
+
+    )
+
+
+# ============================================================
+# UI
+# ============================================================
+
+font = pygame.font.Font(
+    None,
+    28
+)
+
+
+def draw_ui():
+
+    if first_person:
+
+        camera_mode = (
+            "FIRST PERSON"
+        )
+
+    else:
+
+        camera_mode = (
+            "THIRD PERSON"
+        )
+
+    information = [
+
+        "STEPPEFALL 3D",
+
+        f"Camera: {camera_mode}",
+
+        "F5 = Switch camera",
+
+        "WASD = Move",
+
+        "SPACE = Jump / Camera Up",
+
+        "SHIFT = Camera Down",
+
+        "RIGHT MOUSE + DRAG = Look",
+
+        f"Time: {(pygame.time.get_ticks() - start_time) / 1000}s",
+
+        f"Player: "
+        f"{player.x:.1f}, "
+        f"{player.y:.1f}, "
+        f"{player.z:.1f}",
+
+        f"Camera: "
+        f"{third_person_camera.x:.1f}, "
+        f"{third_person_camera.y:.1f}, "
+        f"{third_person_camera.z:.1f}",
+
+        "World: 10 x 10 x 10"
+
+    ]
+
+    y = 15
+
+    for text in information:
+
+        image = font.render(
+
+            text,
+            True,
+            (240, 240, 240)
+
+        )
+
+        screen.blit(
+
+            image,
+            (15, y)
+
+        )
+
+        y += 25
+
+
+# ============================================================
+# MAIN LOOP
+# ============================================================
+
+running = True
+
+while running:
+
+    dt = (
+        clock.tick(60) /
+        1000
+    )
+
+    # ========================================================
+    # EVENTS
+    # ========================================================
+
+    for event in pygame.event.get():
+
+        if event.type == pygame.QUIT:
+
+            running = False
+
+        # ====================================================
+        # WINDOW RESIZE
+        # ====================================================
+
+        if event.type == pygame.VIDEORESIZE:
+
+            WIDTH = event.w
+            HEIGHT = event.h
+            screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+
+        # ====================================================
+        # KEYBOARD
+        # ====================================================
+
+        if event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_ESCAPE:
+
+                running = False
+
+            # Switch camera mode.
+            if event.key == pygame.K_F5:
+                first_person = (
+                    not first_person
+                )
+                # Put the independent camera near
+                # the player when entering third person.
+                if not first_person:
+                    third_person_camera = (
+                        player.copy()
+                    )
+                    third_person_camera.x += 5
+                    third_person_camera.y += 5
+                    third_person_camera.z += 4
+                    # Keep it inside the world.
+                    third_person_camera.x = max(
+                        0,
+                        min(
+                            WORLD_SIZE,
+                            third_person_camera.x
+                        )
+                    )
+                    third_person_camera.y = max(
+                        0,
+                        min(
+                            WORLD_SIZE,
+                            third_person_camera.y
+                        )
+                    )
+                    third_person_camera.z = max(
+                        0,
+                        min(
+                            WORLD_SIZE,
+                            third_person_camera.z
+                        )
+                    )
+
+        # ====================================================
+        # MOUSE BUTTON
+        # ====================================================
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+
+            if event.button == 3:
+
+                mouse_dragging = True
+
+                last_mouse_position = pygame.Vector2(
+                    event.pos
+                )
+
+        if event.type == pygame.MOUSEBUTTONUP:
+
+            if event.button == 3:
+
+                mouse_dragging = False
+
+        # ====================================================
+        # CAMERA LOOK
+        # ====================================================
+
+        if (
+            event.type ==
+            pygame.MOUSEMOTION
+            and
+            mouse_dragging
+        ):
+
+            current_mouse = pygame.Vector2(
+                event.pos
+            )
+
+            movement = (
+                current_mouse -
+                last_mouse_position
+            )
+
+            last_mouse_position = (
+                current_mouse
+            )
+
+            camera_yaw -= (
+                movement.x *
+                0.008
+            )
+
+            camera_pitch -= (
+                movement.y *
+                0.008
+            )
+
+            # Allow looking almost completely up/down.
+
+            camera_pitch = max(
+
+                math.radians(-75),
+                min(
+                    math.radians(75),
+                    camera_pitch
+
+                )
+
+            )
+
+    # ========================================================
+    # UPDATE
+    # ========================================================
+
+    if first_person:
+
+        # WASD controls player.
+
+        update_player_physics(
+            dt
+        )
+
+    else:
+
+        # WASD controls ONLY camera.
+
+        update_third_person_camera(
+            dt
+        )
+
+    time = (pygame.time.get_ticks() - start_time) / 1000
+
+    # ========================================================
+    # DRAW
+    # ========================================================
+
+    cycle_time = time % 1200
+
+    if cycle_time < 300:
+        screen.fill((0, 234, 255))
+        day = True
+
+    elif cycle_time < 360:
+        screen.fill((0, 0, 255))
+        day = True
+
+    elif cycle_time < 780:
+        screen.fill((18, 22, 30))
+        day = False
+
+    elif cycle_time < 840:
+        screen.fill((0, 0, 255))
+        day = False
+
+    else:
+        screen.fill((0, 234, 255))
+        day = True
+                
+    #(18, 22, 30)
+    camera_position = (
+        get_camera_position()
+    )
+
+    draw_world(
+        camera_position
+    )
+
+    # Player is visible in third person.
+    if not first_person:
+
+        draw_player(
+            camera_position
+        )
+
+    # Apply blue tint when in water
+    if in_water:
+        water_surface = pygame.Surface((WIDTH, HEIGHT))
+        water_surface.set_alpha(80)
+        water_surface.fill((30, 100, 200))
+        screen.blit(water_surface, (0, 0))
+
+    draw_ui()
+
+    pygame.display.flip()
+
+pygame.quit()
