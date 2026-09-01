@@ -721,6 +721,13 @@ sys.excepthook = game_error
 
 
 
+
+#---------------code----------------
+
+
+
+
+
 def start():
     pygame.init()
     pygame.font.init()
@@ -746,7 +753,7 @@ def draw_inventory(screen, inventory_data, font):
     screen.blit(title, (10, 60))
     
     y_pos = 90
-    for i, item in enumerate(items[:10]):
+    for i, item in enumerate(items[:25]):
         if i == index:
             pygame.draw.rect(screen, (255, 255, 0), (5, y_pos - 2, 140, 20))
             text = font.render(item[:15], True, (0, 0, 0))
@@ -1010,6 +1017,8 @@ def run():
                                 holding_super_attack = True
                             if event.key == pygame.K_c:
                                 player_1.use_item(enemies)
+                            if event.key == pygame.K_v:
+                                player_1.switch_inventory_section()
                             
                         if event.type == pygame.KEYUP:
                             if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
@@ -1173,6 +1182,7 @@ def run():
                         'items': player_1.inventory[player_1.inventory_section],
                         'index': player_1.inventory_index[player_1.inventory_section]
                     }
+
                     
                     screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
                     pygame.display.flip()

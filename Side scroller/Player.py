@@ -265,7 +265,26 @@ class player:
         if not current_items:
             return
         self.inventory_index[section] += direction
-        self.inventory_index[section] %= len(current_items)
+        #self.inventory_index[section] %= len(current_items)
+        print(self.inventory[self.inventory_section][-1])
+        try:
+            while self.inventory_index[section] < 0:
+                to_add = self.inventory[self.inventory_section][len(self.inventory[self.inventory_section])-1]
+                self.inventory[self.inventory_section].pop(len(self.inventory[self.inventory_section])-1)
+                self.inventory[self.inventory_section].insert(0, to_add)
+                self.inventory_index[section] = 0
+        except:
+            print("possible error")
+        
+        try:
+            while self.inventory_index[section] > 24:
+                to_add = self.inventory[self.inventory_section][0]
+                self.inventory[self.inventory_section].pop(0)
+                self.inventory[self.inventory_section].append(to_add)
+                self.inventory_index[section] = 24
+        except:
+            print("possible error")
+
     
     def equip_item(self, enemies):
         """Equip the currently selected item"""
