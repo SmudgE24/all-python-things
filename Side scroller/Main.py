@@ -965,9 +965,9 @@ def run():
 
             screen = start()  
             level = [24, 24]
-            player_1 = Player.Pirate(level)
+            player_1 = Player.Knight(level)
             clock = pygame.time.Clock()
-
+            
             while runwin:
                 num = str(levelNo)
                 
@@ -978,12 +978,11 @@ def run():
                     level = [list(line.rstrip('\r\n')) for line in file]
 
                 player_1.level = level
-                player_1.hp = 3
+                
                 player_1.timefrozen = False
                 player_1.timefrozenat = None
                 player_1.on_fire_for = None
                 player_1.on_fire = False
-                player_1.coins = 0
                 player_1.jumps = 0
                 won = None
                 running = True
@@ -1182,6 +1181,9 @@ def run():
                         'items': player_1.inventory[player_1.inventory_section],
                         'index': player_1.inventory_index[player_1.inventory_section]
                     }
+
+                    print(player_1.super_charged)
+
 
                     
                     screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)

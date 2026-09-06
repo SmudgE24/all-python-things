@@ -390,6 +390,7 @@ class player:
         # Optionally, you can also affect the environment (e.g., destroy blocks)
         # This part can be implemented based on your game's mechanics
     
+#Player Type Pirate
 
 class Pirate(player):
     def __init__(self, level):
@@ -398,6 +399,7 @@ class Pirate(player):
         self.current_attack = None
         self.current_super = None
         self.hp = 3
+        self.base_hp = self.hp
         self.speed = 7
         self.damage = 4
         self.jumpmax = 2
@@ -455,6 +457,75 @@ class Pirate(player):
             self.charge_count -= 10
             self.super_charged = True
     
+#Player Type Knite
+
+
+class Knight(player):
+    def __init__(self, level):
+        self.charge_count = 0
+        self.super_charged = True
+        self.current_attack = None
+        self.current_super = None
+        self.hp = 5
+        self.base_hp = self.hp
+        self.speed = 4
+        self.damage = 4
+        self.jumpmax = 2
+        player.__init__(self, level, self.jumpmax, self.hp)
+        
+        # Start with a basic sword using item system
+        self.inventory['weapon'].append("Sword +3")
+        self.equipped['weapon'] = "Sword +3"
+        self.base_speed = 4
+        self.speed = 4
+        self.max_hp = 99
+        self.armour_durability = {'armour': 0, 'item': 0}
+    
+    def attack(self):
+        print(self.equipped)
+        print(self.equipped['weapon'])
+        attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
+        self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+    
+    #def use_ability(self):
+    
+    def super_attack(self):
+        print(self.equipped['weapon'])
+        attack_type = "Stab"
+        if self.super_charged:
+            self.super_charged = False
+            if self.going_left:
+                self.current_super = weapon((-10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=1, size_hight=40, level=self.level, attack_type=attack_type)
+            else:
+                self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=1, size_hight=40, level=self.level, attack_type=attack_type)
+    
+    def update_attacks(self, holding_attack, holding_super_attack):
+        if not holding_attack:
+            self.current_attack = None
+        if not holding_super_attack:
+            self.current_super = None
+        a = False
+        if self.current_attack is not None:
+            if self.equipped['weapon'] == 'Flame Gun':
+                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+            elif self.equipped['weapon'] == 'Bow':
+                self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
+                a = self.current_attack.move()
+            else:
+                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+        if self.current_super is not None:
+            self.current_super.move(self.x+40, self.y+20, self.x, self.y)
+
+        if a:
+            self.current_attack = None
+    
+    def recharge_super(self, coins_gained):
+        self.charge_count += coins_gained
+        if self.charge_count > 10 and self.super_charged == False:
+            self.charge_count -= 10
+            self.super_charged = True
+
+
 
 class weapon:
     def __init__(self, velocity, player_x, player_y, size_width, size_hight, level, attack_type):
