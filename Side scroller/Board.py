@@ -5,6 +5,8 @@ Created on Wed Jul  1 14:25:27 2026
 
 @author: ethanbrown
 """
+from sympy import python
+
 import Enemies
 import Items
 import random
@@ -23,8 +25,6 @@ class board:
                     self.airs.append((j, i))
                 elif level[i][j] == 'B':
                     self.blocks.append((j, i))
-                elif level[i][j] == 'L':
-                    self.lavas.append((j, i))
                 elif level[i][j] == 'F':
                     self.fires.append((j, i))
                 elif level[i][j] == 'H':
@@ -90,3 +90,97 @@ class board:
                 blocks.append((x, y))
         
         return blocks
+
+
+
+    def lava_tick(self):
+
+        # Save exactly what the level looked like at the START
+        old_level = [row[:] for row in self.level]
+
+        # Find all lava that existed at the START of this tick
+        lava_positions = []
+
+        for y in range(len(old_level)):
+            for x in range(len(old_level[y])):
+                if str(old_level[y][x]).startswith("L"):
+                    lava_positions.append((x, y))
+
+        # Process ONLY lava from the starting level
+        for x, y in lava_positions:
+
+            lava_number = int(old_level[y][x][1:])
+
+            try:
+
+                # FALL DOWN
+                if old_level[y+1][x] != "B" and \
+                old_level[y+1][x] != "L7" and \
+                old_level[y+1][x] != "C" and \
+                old_level[y+1][x] != "H":
+
+                    if str(old_level[y+1][x]).startswith("L"):
+
+                        lava_number_below = int(old_level[y+1][x][1:])
+
+                        total_lava = lava_number_below + lava_number
+
+                        self.level[y+1][x] = "L" + str(min(total_lava, 7))
+
+                        self.level[y][x] = "L" + str(max(total_lava - 7, 0))
+
+                    else:
+
+                        self.level[y+1][x] = "L" + str(lava_number)
+
+                        self.level[y][x] = "."
+
+                # SPREAD LEFT / RIGHT
+                else:
+
+                    if lava_number > 0 and old_level[y][x+1] == ".":
+                        self.level[y][x+1] = "L1"
+                        lava_number -= 1
+
+                    if lava_number > 0 and old_level[y][x-1] == ".":
+                        self.level[y][x-1] = "L1"
+                        lava_number -= 1
+
+                    self.level[y][x] = "L" + str(lava_number)
+
+                # ABSORB INTO LAVA ON LEFT
+                try:
+                    if str(old_level[y][x-1]).startswith("L"):
+
+                        lava_number_left = int(old_level[y][x-1][1:])
+
+                        if lava_number > 0 and lava_number_left < 7:
+
+                            self.level[y][x-1] = "L" + str(lava_number_left + 1)
+                            lava_number -= 1
+
+                            self.level[y][x] = "L" + str(lava_number)
+
+                except IndexError:
+                    pass
+
+                # ABSORB INTO LAVA ON RIGHT
+                try:
+                    if str(old_level[y][x+1]).startswith("L"):
+
+                        lava_number_right = int(old_level[y][x+1][1:])
+
+                        if lava_number > 0 and lava_number_right < 7:
+
+                            self.level[y][x+1] = "L" + str(lava_number_right + 1)
+                            lava_number -= 1
+
+                            self.level[y][x] = "L" + str(lava_number)
+
+                except IndexError:
+                    pass
+
+            except IndexError:
+                pass
+
+        return self.level

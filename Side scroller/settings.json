@@ -1,0 +1,21 @@
+{
+    "settings": [
+        {
+            "question": "Play as Knight",
+            "type": "character",
+            "character": "Knight",
+            "checked": false
+        },
+        {
+            "question": "Play as Pirate",
+            "type": "character",
+            "character": "Pirate",
+            "checked": true
+        },
+        {
+            "question": "Show damage flash",
+            "type": "checkbox",
+            "checked": true
+        }
+    ]
+}

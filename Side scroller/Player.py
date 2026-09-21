@@ -28,6 +28,8 @@ class player:
         self.hp = hp
         self.max_hp = 99
 
+        self.gravity = 1
+
         self.inventory = {'armour':[], 
                           'item':[],
                           'weapon':[]}
@@ -98,7 +100,7 @@ class player:
     def update_vy(self):
         Or = True
         block = "B"
-        self.vy += 1
+        self.vy += self.gravity
 
         if self.vy > 12:
             self.vy = 12
@@ -119,23 +121,41 @@ class player:
         left = (self.x + 1) // 40
         right = (self.x + 39) // 40
         bottom = (self.y + 41) // 40
-    
-        if bottom < 0 or bottom >= len(self.level):
-            return False
-    
-        if left < 0 or right >= len(self.level[0]):
-            return False
+
+        if block != "L":
+            if bottom < 0 or bottom >= len(self.level):
+                return False
         
-        if Or:
-            return (
-                self.level[bottom][left] == block or
-                self.level[bottom][right] == block
-            )
-        else:
-            return (
-                self.level[bottom][left] == block and
-                self.level[bottom][right] == block
+            if left < 0 or right >= len(self.level[0]):
+                return False
+            
+            if Or:
+                return (
+                    self.level[bottom][left] == block or
+                    self.level[bottom][right] == block
                 )
+            else:
+                return (
+                    self.level[bottom][left] == block and
+                    self.level[bottom][right] == block
+                    )
+        else:
+            if bottom < 0 or bottom >= len(self.level):
+                return False
+        
+            if left < 0 or right >= len(self.level[0]):
+                return False
+            
+            if Or:
+                return (
+                    list(self.level[bottom][left])[0] == block or
+                    list(self.level[bottom][right])[0] == block
+                )
+            else:
+                return (
+                    list(self.level[bottom][left])[0] == block and
+                    list(self.level[bottom][right])[0] == block
+                    )
     
     def is_under_wall(self, block, Or):
         left = (self.x + 1) // 40
@@ -343,8 +363,11 @@ class player:
         items = self.inventory[section]
         if not items:
             return
-        selected_item = items[self.inventory_index[section]]
-        
+        try:
+            selected_item = items[self.inventory_index[section]]
+        except IndexError:
+            return
+
         try:
             item = Items.Item(selected_item)
             effect = item.get_effect()

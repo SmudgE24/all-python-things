@@ -9,10 +9,47 @@ import pygame
 import Player
 import Board
 import Items
+import music
+import json
 import sys
 import os
 import sys
 import traceback
+
+SETTINGS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "settings.json"
+)
+CHARACTER_CLASSES = {
+    "Knight": Player.Knight,
+    "Pirate": Player.Pirate
+}
+
+def load_settings():
+    with open(SETTINGS_PATH, "r") as file:
+        return json.load(file)
+
+def save_settings(settings):
+    with open(SETTINGS_PATH, "w") as file:
+        json.dump(settings, file, indent=4)
+        file.write("\n")
+
+def change_setting(settings, setting_index):
+    setting = settings["settings"][setting_index]
+
+    if setting["type"] == "character":
+        for other_setting in settings["settings"]:
+            if other_setting["type"] == "character":
+                other_setting["checked"] = False
+
+    setting["checked"] = True if setting["type"] == "character" else not setting["checked"]
+    save_settings(settings)
+
+def selected_character(settings):
+    for setting in settings["settings"]:
+        if setting["type"] == "character" and setting["checked"]:
+            return setting["character"]
+    return "Knight"
 
 def game_error(error_type, error, traceback_object):
 
@@ -739,31 +776,85 @@ def start():
 
 def draw_inventory(screen, inventory_data, font):
     """Draw inventory panel on the left side"""
+
     pygame.draw.rect(screen, (30, 30, 50), (0, 50, 150, 670))
     pygame.draw.rect(screen, (100, 100, 150), (0, 50, 150, 670), 2)
-    
+
     section = inventory_data['section']
     items = inventory_data['items']
+
+    # -------------------------------------------------
+    # ALWAYS keep the index valid
+    # -------------------------------------------------
+    if items:
+        inventory_data['index'] = max(
+            0,
+            min(inventory_data['index'], len(items) - 1)
+        )
+    else:
+        inventory_data['index'] = 0
+
     index = inventory_data['index']
-    
-    section_colors = {'weapon': (255, 100, 100), 'armour': (100, 150, 255), 'item': (150, 255, 100)}
+
+    # -------------------------------------------------
+    # Section colour
+    # -------------------------------------------------
+    section_colors = {
+        'weapon': (255, 100, 100),
+        'armour': (100, 150, 255),
+        'item': (150, 255, 100)
+    }
+
     color = section_colors.get(section, (255, 255, 255))
-    
+
+    # -------------------------------------------------
+    # Title
+    # -------------------------------------------------
     title = font.render(section.upper(), True, color)
     screen.blit(title, (10, 60))
-    
+
+    # -------------------------------------------------
+    # Items
+    # -------------------------------------------------
     y_pos = 90
+
     for i, item in enumerate(items[:25]):
+
+        # Pointer
         if i == index:
-            pygame.draw.rect(screen, (255, 255, 0), (5, y_pos - 2, 140, 20))
-            text = font.render(item[:15], True, (0, 0, 0))
+            pygame.draw.rect(
+                screen,
+                (255, 255, 0),
+                (5, y_pos - 2, 140, 20)
+            )
+
+            text = font.render(
+                str(item)[:15],
+                True,
+                (0, 0, 0)
+            )
+
         else:
-            text = font.render(item[:15], True, (200, 200, 200))
+            text = font.render(
+                str(item)[:15],
+                True,
+                (200, 200, 200)
+            )
+
         screen.blit(text, (10, y_pos))
+
         y_pos += 25
-    
+
+    # -------------------------------------------------
+    # Empty inventory
+    # -------------------------------------------------
     if not items:
-        text = font.render("Empty", True, (100, 100, 100))
+        text = font.render(
+            "Empty",
+            True,
+            (100, 100, 100)
+        )
+
         screen.blit(text, (10, 90))
 
 def level_complete(screen, levelNo):
@@ -838,8 +929,21 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
         for x in range(len(level[y])):
             if level[y][x] == "B":
                 pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
-            elif level[y][x] == "L":
-                pygame.draw.rect(screen, (255,0,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+            elif list(level[y][x])[0] == "L":
+                lava_number = int(list(level[y][x])[1])
+                    
+                lava_height = lava_number * (40 / 7)
+                
+                pygame.draw.rect(
+                    screen,
+                    (255, 0, 0),
+                    (
+                        INVENTORY_WIDTH + x * 40 + add[0],
+                        y * 40 + add[1] + (40 - lava_height),
+                        40,
+                        lava_height
+                    )
+                )
             elif level[y][x] == "C":
                 pygame.draw.rect(screen, (255,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "H":
@@ -908,6 +1012,68 @@ def death(screen):
         screen.blit(text, text_rect)
         pygame.display.flip()
     return quitting
+
+def settings_menu(screen, settings):
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont(None, 30)
+    title_font = pygame.font.SysFont(None, 60)
+    back_button = pygame.Rect(500, 640, 280, 60)
+    checkbox_buttons = []
+    scroll = 0
+    running = True
+
+    while running:
+        screen.fill((30, 30, 30))
+        title = title_font.render("SETTINGS", True, (255, 255, 255))
+        screen.blit(title, title.get_rect(center=(640, 100)))
+
+        checkbox_buttons = []
+        for index, setting in enumerate(settings["settings"]):
+            y_pos = 150 + (index * 50) - scroll
+            if 125 <= y_pos <= 590:
+                checkbox = pygame.Rect(400, y_pos, 35, 35)
+                checkbox_buttons.append((checkbox, index))
+                #(70, 100, 160)
+                pygame.draw.rect(screen, (0, 0, 0), checkbox, border_radius=5)
+                if setting["checked"]:
+                    pygame.draw.rect(screen, (0, 255, 0), checkbox.inflate(-10, -10))
+
+                question = font.render(setting["question"], True, (255, 255, 255))
+                screen.blit(question, (455, y_pos + 4))
+
+        pygame.draw.rect(screen, (80, 80, 80), back_button, border_radius=10)
+        back_text = font.render("Back", True, (255, 255, 255))
+        screen.blit(back_text, back_text.get_rect(center=back_button.center))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_UP:
+                    scroll = max(0, scroll - 50)
+                elif event.key == pygame.K_DOWN:
+                    max_scroll = max(0, len(settings["settings"]) * 50 - 465)
+                    scroll = min(max_scroll, scroll + 50)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1 and back_button.collidepoint(event.pos):
+                    running = False
+                elif event.button == 1:
+                    for checkbox, index in checkbox_buttons:
+                        if checkbox.collidepoint(event.pos):
+                            change_setting(settings, index)
+                elif event.button == 4:
+                    scroll = max(0, scroll - 50)
+                elif event.button == 5:
+                    max_scroll = max(0, len(settings["settings"]) * 50 - 465)
+                    scroll = min(max_scroll, scroll + 50)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    return settings
     
 
 def run():
@@ -916,6 +1082,7 @@ def run():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))   
     screen = start()
     font = pygame.font.SysFont(None, 30)
+    settings = load_settings()
     while True:
         menu = True
 
@@ -928,11 +1095,17 @@ def run():
             # =========================
 
             play_button = pygame.Rect(500, 300, 280, 70)
+            settings_button = pygame.Rect(500, 400, 280, 70)
 
             pygame.draw.rect(screen, (60, 120, 70), play_button, border_radius=10)
+            pygame.draw.rect(screen, (70, 100, 160), settings_button, border_radius=10)
 
             text = font.render("Play", True, (255, 255, 255))
             text_rect = text.get_rect(center=play_button.center)
+            screen.blit(text, text_rect)
+
+            text = font.render("Settings", True, (255, 255, 255))
+            text_rect = text.get_rect(center=settings_button.center)
             screen.blit(text, text_rect)
 
             # =========================
@@ -951,6 +1124,10 @@ def run():
 
                         menu = False
 
+                    elif settings_button.collidepoint(event.pos):
+
+                        settings = settings_menu(screen, settings)
+
             pygame.display.flip()
 
         round = True
@@ -963,9 +1140,13 @@ def run():
 
             levelNo = 1
 
+            
+
+
             screen = start()  
             level = [24, 24]
-            player_1 = Player.Knight(level)
+            player_class = CHARACTER_CLASSES.get(selected_character(settings), Player.Knight)
+            player_1 = player_class(level)
             clock = pygame.time.Clock()
             
             while runwin:
@@ -977,8 +1158,29 @@ def run():
                 ) as file:
                     level = [list(line.rstrip('\r\n')) for line in file]
 
-                player_1.level = level
+                print("Lava positions:")
+
+                for y in range(len(level)):
+                    for x in range(len(level[y])):
+                        if level[y][x] == "L":
+                            print("Lava at:", x, y)
+
+                for i in range(len(level)):
+                    for j in range(len(level[i])):
+                        if level[i][j] == "S":
+                            player_1.x = j * 40
+                            player_1.y = i * 40
+                            break
+
+                for i in range(len(level)):
+                    for j in range(len(level[i])):
+                        if level[i][j] == "L":
+                            level[i][j] = "L7"
+
+                print(level)
                 
+                player_1.level = level
+                LAVA_SPEED = 100
                 player_1.timefrozen = False
                 player_1.timefrozenat = None
                 player_1.on_fire_for = None
@@ -997,6 +1199,7 @@ def run():
                 enemies = aBoard.spawn()
                 holding_attack = False
                 holding_super_attack = False
+                music.play_music("audio.mp3")
                 while running:
                     #helpfull for stomping on enemies heads
                     player_1.last_x = player_1.x
@@ -1064,15 +1267,16 @@ def run():
                         player_1.recharge_super(1)
                         
                     #damage flash, no, not that type
-                    if player_1.hp < lastHp:
-                        dam = True
-                        pointOfDamage = 0
-                        lastHp = player_1.hp
-                    if pointOfDamage <= 20 and dam:
-                        pointOfDamage += 1
-                    if pointOfDamage > 20:
-                        pointOfDamage = 21
-                        dam = False
+                    if settings["settings"][2]["checked"] == True:
+                        if player_1.hp < lastHp:
+                            dam = True
+                            pointOfDamage = 0
+                            lastHp = player_1.hp
+                        if pointOfDamage <= 20 and dam:
+                            pointOfDamage += 1
+                        if pointOfDamage > 20:
+                            pointOfDamage = 21
+                            dam = False
                     
                     #player death
                     if player_1.death():
@@ -1163,10 +1367,12 @@ def run():
                                 contents = aBoard.find_chest_contents()
                                 if contents[0] == "10 Coins":
                                     player_1.coins += 10
+                                    player_1.recharge_super(10)
                                 else:
                                     player_1.AppendInventory(contents[0])
                                 if contents[1] == "10 Coins":
                                     player_1.coins += 10
+                                    player_1.recharge_super(10)
                                 else:
                                     player_1.AppendInventory(contents[1])
                         except IndexError:
@@ -1182,9 +1388,13 @@ def run():
                         'index': player_1.inventory_index[player_1.inventory_section]
                     }
 
-                    print(player_1.super_charged)
+                    print("tick")
 
-
+                    if ticks % LAVA_SPEED == 0:
+                        level = aBoard.lava_tick()
+                        player_1.level = level
+                        for i in range(len(enemies)):
+                            enemies[i].level = level
                     
                     screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
                     pygame.display.flip()
