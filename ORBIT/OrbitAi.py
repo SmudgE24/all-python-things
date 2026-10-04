@@ -2,8 +2,6 @@ import ollama
 import pygame
 import threading
 import sys
-import os
-import shutil
 import subprocess
 import time
 
@@ -11,35 +9,7 @@ import time
 # ORBIT AI - MODEL CONFIGURATION
 # ============================================================
 
-FALLBACK_MODEL = "qwen3:0.6b"
-BIG_MODEL = "qwen3-coder"
-
-DRIVE_PATH = "/Volumes/ETHANS 1TB"
-DRIVE_MODEL_PATH = "/Volumes/ETHANS 1TB/OllamaModels"
-
-
-def drive_connected():
-    return os.path.isdir(DRIVE_PATH)
-
-
-def get_model():
-    """
-    Choose the best available model.
-
-    If the removable drive is connected:
-        qwen3-coder
-
-    Otherwise:
-        qwen3:0.6b
-    """
-
-    if drive_connected():
-        return BIG_MODEL
-
-    return FALLBACK_MODEL
-
-
-CURRENT_MODEL = get_model()
+CURRENT_MODEL = "qwen3:0.6b"
 
 
 # ============================================================
@@ -47,10 +17,8 @@ CURRENT_MODEL = get_model()
 # ============================================================
 
 def get_ai_response(messages):
-    global CURRENT_MODEL
 
     try:
-        CURRENT_MODEL = get_model()
 
         response = ollama.chat(
             model=CURRENT_MODEL,
@@ -60,6 +28,7 @@ def get_ai_response(messages):
         return response["message"]["content"]
 
     except Exception as e:
+
         return f"Error connecting to {CURRENT_MODEL}:\n{e}"
 
 
@@ -73,7 +42,7 @@ def shell_out():
     print("       ORBIT AI - CLI")
     print("==============================")
 
-    print(f"Model: {get_model()}")
+    print(f"Model: {CURRENT_MODEL}")
     print("Type 'exit' or 'quit' to stop.\n")
 
     messages = []
@@ -81,15 +50,19 @@ def shell_out():
     while True:
 
         try:
+
             user_input = input("You: ")
 
         except KeyboardInterrupt:
+
             break
 
         if user_input.lower() in ["exit", "quit"]:
+
             break
 
         if not user_input.strip():
+
             continue
 
         messages.append({
@@ -211,7 +184,9 @@ class OrbitGUI:
         for paragraph in paragraphs:
 
             if not paragraph:
+
                 lines.append("")
+
                 continue
 
             words = paragraph.split()
@@ -233,11 +208,13 @@ class OrbitGUI:
                 else:
 
                     if current_line:
+
                         lines.append(current_line)
 
                     current_line = word
 
             if current_line:
+
                 lines.append(current_line)
 
         return [
@@ -377,19 +354,9 @@ class OrbitGUI:
             (PADDING, 14)
         )
 
-        model = get_model()
+        status = "● QWEN3 0.6B  •  LOCAL"
 
-        if model == BIG_MODEL:
-
-            status = "● QWEN3-CODER  •  USB"
-
-            status_color = (100, 230, 150)
-
-        else:
-
-            status = "● QWEN3 0.6B  •  LOCAL"
-
-            status_color = (100, 180, 255)
+        status_color = (100, 180, 255)
 
         status_surface = self.small_font.render(
             status,
@@ -567,6 +534,8 @@ class OrbitGUI:
 
     def run(self):
 
+        global WIDTH, HEIGHT
+
         while self.running:
 
             self.screen.fill(
@@ -588,8 +557,6 @@ class OrbitGUI:
                 # -------------------------------------------
 
                 elif event.type == pygame.VIDEORESIZE:
-
-                    global WIDTH, HEIGHT
 
                     WIDTH = max(
                         600,
@@ -827,8 +794,9 @@ def main():
     print("         ORBIT AI")
     print("==============================")
     print()
-    print("Detected model:")
-    print(f"  {get_model()}")
+
+    print("Model:")
+    print(f"  {CURRENT_MODEL}")
     print()
 
     print("Choose your interface:")
