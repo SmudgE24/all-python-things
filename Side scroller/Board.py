@@ -177,9 +177,15 @@ class board:
 
                             self.level[y][x] = "L" + str(lava_number)
 
+
+                
                 except IndexError:
                     pass
 
+                if lava_number <= 0:
+                    self.level[y][x] = "."
+                
+                
             except IndexError:
                 pass
 
