@@ -1,21 +1,28 @@
 import Player
 
-class boss:
-    def __init__(self, level, jumpmax, hp, type):
+class fire_boss:
+    def __init__(self, level, jumpmax, hp):
         self.level = level
         self.jumpmax = jumpmax
         self.hp = hp
-        self.type = type
-        if self.type == "fire":
-            
+        self.name = "Fire Boss"
         Player.player.__init__(self, level, self.jumpmax, self.hp)
-
-    def take_damage(self, damage):
-        self.health -= damage
-        if self.health <= 0:
-            print(f"{self.name} has been defeated!")
-        else:
-            print(f"{self.name} has {self.health} health remaining.")
+        attackCurrents = []
 
     def attack(self):
-        return self.attack_power
+        self.attackCurrents.append(Player.weapon((10, 0), self.x, self.y, 10, 10, self.level, "ranged"))
+
+    def updateAttack(self):
+        toRemove = []
+        a = False
+        for i in range(len(self.attackCurrents)):
+            a = self.attackCurrents[i].move()
+            if a:
+                toRemove.append(self.attackCurrents[i])
+        for attack in toRemove:
+            self.attackCurrents.remove(attack)
+
+    def run(self, player_x, player_y):
+        self.updateAttack()
+        if player_x > self.x:
+            self.move()

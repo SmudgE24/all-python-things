@@ -21,6 +21,8 @@ class player:
 
         self.x = 0
         self.y = 0
+        self.width = 40
+        self.hight = 40
 
         self.level = level
 
@@ -48,8 +50,8 @@ class player:
     def collect_coins(self):
         if self.is_on_wall("C", True):
             left = (self.x + 1) // 40
-            right = (self.x + 39) // 40
-            bottom = (self.y + 41) // 40
+            right = (self.x + self.width - 1) // 40
+            bottom = (self.y + self.hight + 1) // 40
     
             if self.level[bottom][left] == "C":
                 self.level[bottom][left] = "."
@@ -119,8 +121,8 @@ class player:
 
     def is_on_wall(self, block, Or):
         left = (self.x + 1) // 40
-        right = (self.x + 39) // 40
-        bottom = (self.y + 41) // 40
+        right = (self.x + self.width - 1) // 40
+        bottom = (self.y + self.hight + 1) // 40
 
         if block != "L":
             if bottom < 0 or bottom >= len(self.level):
@@ -159,7 +161,7 @@ class player:
     
     def is_under_wall(self, block, Or):
         left = (self.x + 1) // 40
-        right = (self.x + 39) // 40
+        right = (self.x + self.width - 1) // 40
         top = ((self.y - 1) // 40)
     
         if top < 0 or top >= len(self.level):
@@ -183,7 +185,7 @@ class player:
     def is_touching_wall_left(self, block, Or):
         left = (self.x - 1) // 40
         top = ((self.y + 1) // 40)
-        bottom = ((self.y + 39) // 40)
+        bottom = ((self.y + self.hight - 1) // 40)
     
         if left < 0:
             return True
@@ -203,9 +205,9 @@ class player:
                 )
     
     def is_touching_wall_right(self, block, Or):
-        right = (self.x + 40) // 40
+        right = (self.x + self.width) // 40
         top = ((self.y + 1) // 40)
-        bottom = ((self.y + 39) // 40)
+        bottom = ((self.y + self.hight - 1) // 40)
     
         if right >= len(self.level[0]):
             return True
@@ -312,7 +314,7 @@ class player:
         items = self.inventory[section]
         if not items:
             return
-        selected_item = items[self.inventory_index[section]]
+        selected_item = items[self.inventory_index[section] % len(items)]
         self.equipped[section] = selected_item
         self._apply_item_effects(enemies,selected_item)
     

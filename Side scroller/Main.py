@@ -882,7 +882,7 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None):
+def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40):
     INVENTORY_WIDTH = 150
     GAME_WIDTH = 1280 - INVENTORY_WIDTH
     
@@ -923,32 +923,38 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     screen.blit(img, (0, 0))
     
     # Draw game world shifted right by inventory width
-    pygame.draw.rect(screen, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], 40, 40))
+    pygame.draw.rect(screen, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
     
     for y in range(len(level)):
         for x in range(len(level[y])):
             if level[y][x] == "B":
                 pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
-            elif list(level[y][x])[0] == "L":
-                lava_number = int(list(level[y][x])[1])
-                    
-                lava_height = lava_number * (40 / 7)
-                
-                pygame.draw.rect(
-                    screen,
-                    (255, 0, 0),
-                    (
-                        INVENTORY_WIDTH + x * 40 + add[0],
-                        y * 40 + add[1] + (40 - lava_height),
-                        40,
-                        lava_height
-                    )
+            elif str(level[y][x]).startswith("L"):
+                lava_number = int(level[y][x][1:])
+                lava_height = max(1, round(lava_number * (40 / 7)))
+                lava_rect = pygame.Rect(
+                    INVENTORY_WIDTH + x * 40 + add[0],
+                    y * 40 + add[1] + 40 - lava_height,
+                    40,
+                    lava_height
                 )
+                pygame.draw.rect(screen, (155, 30, 4), lava_rect)
+                inner_rect = lava_rect.inflate(-4, -2)
+                if inner_rect.width > 0 and inner_rect.height > 0:
+                    pygame.draw.rect(screen, (255, 92, 8), inner_rect)
+                    surface_height = max(1, min(3, inner_rect.height // 2))
+                    pygame.draw.rect(
+                        screen,
+                        (255, 204, 55),
+                        (inner_rect.x + 2, inner_rect.y, inner_rect.width - 4, surface_height)
+                    )
             elif level[y][x] == "C":
                 pygame.draw.rect(screen, (255,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "H":
                 pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
-                
+            elif level[y][x] == "P":
+                pygame.draw.rect(screen, (150, 255, 150), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                        
     for i in range(len(bullets)):
         if bullets[i] is not None:
             pygame.draw.rect(screen, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width))
@@ -1180,7 +1186,7 @@ def run():
                 print(level)
                 
                 player_1.level = level
-                LAVA_SPEED = 100
+                LAVA_SPEED = 20
                 player_1.timefrozen = False
                 player_1.timefrozenat = None
                 player_1.on_fire_for = None
@@ -1396,7 +1402,13 @@ def run():
                         for i in range(len(enemies)):
                             enemies[i].level = level
                     
-                    screen = drawAll(screen, level, player_x=player_1.x, player_y=player_1.y, bullets=[player_1.current_attack, player_1.current_super], hp=player_1.hp, dam=dam, coins=player_1.coins, enemies=enemies, inventory_data=inventory_data)
+                    screen = drawAll(
+                        screen, level, player_x=player_1.x, player_y=player_1.y,
+                        bullets=[player_1.current_attack, player_1.current_super],
+                        hp=player_1.hp, dam=dam, coins=player_1.coins,
+                        enemies=enemies, inventory_data=inventory_data,
+                        player_width=player_1.width, player_hight=player_1.hight
+                    )
                     pygame.display.flip()
                     clock.tick(40)
                     ticks += 1

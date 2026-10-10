@@ -23,11 +23,11 @@ class Enemy(Player.player):
     def isTouchingPlayer(self, player):
         if (
             player.x < self.x + 40 and
-            player.x + 40 > self.x and
+            player.x + player.width > self.x and
             player.y < self.y + 40 and
-            player.y + 40 > self.y
+            player.y + player.hight > self.y
         ):
-            if player.vy > 0 and player.last_y + 40 <= self.y + 5:
+            if player.vy > 0 and player.last_y + player.hight <= self.y + 5:
                 return "stomp"
             else:
                 return "hit"
