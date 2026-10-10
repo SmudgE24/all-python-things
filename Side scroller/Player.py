@@ -102,12 +102,19 @@ class player:
     def update_vy(self):
         Or = True
         block = "B"
+        
         self.vy += self.gravity
 
         if self.vy > 12:
             self.vy = 12
 
-        self.y += self.vy
+        if self.is_on_wall("P", True) == False:
+            self.y += self.vy
+        else:
+            if self.vy > 0:
+                self.vy = 0
+            self.y += self.vy
+            self.jumps = 0
 
         if self.vy > 0:
             if self.is_on_wall(block, Or):

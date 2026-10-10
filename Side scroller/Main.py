@@ -953,7 +953,7 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
             elif level[y][x] == "H":
                 pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif level[y][x] == "P":
-                pygame.draw.rect(screen, (150, 255, 150), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (0, 55, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
                         
     for i in range(len(bullets)):
         if bullets[i] is not None:
@@ -1205,7 +1205,7 @@ def run():
                 enemies = aBoard.spawn()
                 holding_attack = False
                 holding_super_attack = False
-                music.play_music("audio.mp3")
+                music.play_music("audio (1).mp3")
                 while running:
                     #helpfull for stomping on enemies heads
                     player_1.last_x = player_1.x
