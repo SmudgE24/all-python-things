@@ -439,6 +439,9 @@ class Pirate(player):
         
         # Start with a basic sword using item system
         self.inventory['weapon'].append("Sword +1")
+        self.inventory['weapon'].append("Bow")
+        self.inventory['armour'].append("Void boots")
+        self.inventory['item'].append("Time Freeze 15s")
         self.equipped['weapon'] = "Sword +1"
         self.base_speed = 7
         self.speed = 7

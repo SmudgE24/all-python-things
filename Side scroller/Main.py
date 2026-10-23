@@ -1089,6 +1089,7 @@ def run():
     screen = start()
     font = pygame.font.SysFont(None, 30)
     settings = load_settings()
+    music.play_music("audio (1).mp3")
     while True:
         menu = True
 
@@ -1205,7 +1206,7 @@ def run():
                 enemies = aBoard.spawn()
                 holding_attack = False
                 holding_super_attack = False
-                music.play_music("audio (1).mp3")
+                
                 while running:
                     #helpfull for stomping on enemies heads
                     player_1.last_x = player_1.x
@@ -1271,8 +1272,8 @@ def run():
                     #collect coins
                     if player_1.collect_coins():
                         player_1.recharge_super(1)
-                        
-                    #damage flash, no, not that type
+
+                    
                     if settings["settings"][2]["checked"] == True:
                         if player_1.hp < lastHp:
                             dam = True
@@ -1363,6 +1364,12 @@ def run():
                                 continue
                         
                             i += 1
+
+                        if ticks % LAVA_SPEED == 0:
+                            level = aBoard.lava_tick()
+                            player_1.level = level
+                            for i in range(len(enemies)):
+                                enemies[i].level = level
                     
                     #open chests
                     a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
@@ -1394,13 +1401,10 @@ def run():
                         'index': player_1.inventory_index[player_1.inventory_section]
                     }
 
-                    print("tick")
+                    print(ticks)
+                    print(f"TPS: {clock.get_fps():.1f}")
 
-                    if ticks % LAVA_SPEED == 0:
-                        level = aBoard.lava_tick()
-                        player_1.level = level
-                        for i in range(len(enemies)):
-                            enemies[i].level = level
+                    
                     
                     screen = drawAll(
                         screen, level, player_x=player_1.x, player_y=player_1.y,
@@ -1410,7 +1414,7 @@ def run():
                         player_width=player_1.width, player_hight=player_1.hight
                     )
                     pygame.display.flip()
-                    clock.tick(40)
+                    clock.tick(41.5)
                     ticks += 1
 
                     if won is not None:
