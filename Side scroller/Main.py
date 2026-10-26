@@ -1413,6 +1413,8 @@ def run():
                             boss.update_vy()
                             boss.run(player_1.x, player_1.y)
 
+                            boss.being_damaged = False
+
                             weapon_damage = player_1.damage
 
                             # Add weapon damage if equipped
@@ -1429,6 +1431,7 @@ def run():
                                     boss.take_damage(weapon_damage)
                                     player_1.coins += 1
                                     setattr(player_1, attack_name, None)
+                                    boss.being_damaged = True
                                     if boss.hp <= 0:
                                         bosses = None
                                         boss = None
@@ -1437,7 +1440,7 @@ def run():
                             if bosses is not None:
                                 for attack in boss.attackCurrents[:]:
                                     if boss.is_attack_touching_player(attack, player_1):
-                                        player_1.take_damage(1)
+                                        player_1.take_damage(2)
                                         boss.attackCurrents.remove(attack)
 
                                 result = boss.isTouchingPlayer(player_1)
@@ -1445,11 +1448,13 @@ def run():
                                     player_1.vy = -10
                                     player_1.coins += 3
                                     boss.take_damage(2)
+                                    boss.being_damaged = True
                                 elif result == "hit":
                                     if boss.contact_cooldown == 0:
                                         player_1.take_damage(1)
                                         boss.take_damage(1)
                                         boss.contact_cooldown = 40
+                                        boss.being_damaged = True
 
                                 if boss.hp <= 0:
                                     bosses = None

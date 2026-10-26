@@ -3,6 +3,7 @@ import Player
 
 class fire_boss(Player.player):
     def __init__(self, level):
+        self.being_damaged = False
         self.jumpmax = 5
         self.hp = 3670
         self.name = "Fire Boss"
@@ -73,6 +74,7 @@ class fire_boss(Player.player):
             (left and self.is_touching_wall_left("B", True))
             or (right and self.is_touching_wall_right("B", True))
             or self.y > player_y + 20
+            or self.being_damaged
         ):
             self.jump()
 

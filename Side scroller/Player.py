@@ -463,7 +463,7 @@ class Pirate(player):
             else:
                 self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
     
-    def update_attacks(self, holding_attack, holding_super_attack):
+    def update_attacks(self, holding_attack, holding_super_attack, extraa):
         if not holding_attack:
             self.current_attack = None
         if not holding_super_attack:
