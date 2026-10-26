@@ -403,7 +403,7 @@ class player:
             
             if self.on_fire_for == 85:
                 self.on_fire = False
-        if self.is_on_wall(block="L", Or=False):
+        if self.is_on_wall(block="L", Or=True):
             self.on_fire = True
             self.on_fire_for = None
 
@@ -498,7 +498,7 @@ class Knight(player):
         self.super_charged = True
         self.current_attack = None
         self.current_super = None
-        self.hp = 5
+        self.hp = 99
         self.base_hp = self.hp
         self.speed = 4
         self.damage = 4
@@ -531,7 +531,7 @@ class Knight(player):
             else:
                 self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=1, size_hight=40, level=self.level, attack_type=attack_type)
     
-    def update_attacks(self, holding_attack, holding_super_attack):
+    def update_attacks(self, holding_attack, holding_super_attack, extraa):
         if not holding_attack:
             self.current_attack = None
         if not holding_super_attack:
@@ -548,7 +548,7 @@ class Knight(player):
         if self.current_super is not None:
             self.current_super.move(self.x+40, self.y+20, self.x, self.y)
 
-        if a:
+        if a or extraa:
             self.current_attack = None
     
     def recharge_super(self, coins_gained):

@@ -4,13 +4,13 @@
             "question": "Play as Knight",
             "type": "character",
             "character": "Knight",
-            "checked": false
+            "checked": true
         },
         {
             "question": "Play as Pirate",
             "type": "character",
             "character": "Pirate",
-            "checked": true
+            "checked": false
         },
         {
             "question": "Show damage flash",

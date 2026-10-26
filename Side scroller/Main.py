@@ -882,20 +882,24 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40):
+def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None):
     INVENTORY_WIDTH = 150
     GAME_WIDTH = 1280 - INVENTORY_WIDTH
     
+    
+
     add = [0, 0]
     contemplating = True
     while contemplating:
-        if (player_y + add[1]) > 600 or ((player_y + add[1]) < 120 and add[1] < 0):
-            if (player_y + add[1]) > 600:
+        if (player_y + add[1]) > 450 or ((player_y + add[1]) < 220 and add[1] < 0):
+            if (player_y + add[1]) > 450:
                 add[1] -= 1
             else:
                 add[1] += 1
         else:
             contemplating = False
+
+
     contemplating = True
     while contemplating:
         if (player_x + add[0]) > 750 or ((player_x + add[0]) < 380 and player_x < 380):
@@ -961,6 +965,38 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     
     for i in range(len(enemies)):
         pygame.draw.rect(screen, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
+
+    if boss is not None:
+        boss_rect = pygame.Rect(
+            INVENTORY_WIDTH + boss.x + add[0],
+            boss.y + add[1],
+            boss.width,
+            boss.hight
+        )
+        pygame.draw.rect(screen, (190, 35, 15), boss_rect)
+        pygame.draw.rect(screen, (255, 130, 20), boss_rect.inflate(-12, -12))
+        health_width = round(boss.width * max(0, boss.hp) / boss.max_hp)
+        pygame.draw.rect(
+            screen,
+            (60, 0, 0),
+            (boss_rect.x, boss_rect.y - 8, boss.width, 5)
+        )
+        pygame.draw.rect(
+            screen,
+            (255, 30, 20),
+            (boss_rect.x, boss_rect.y - 8, health_width, 5)
+        )
+        for attack in boss.attackCurrents:
+            pygame.draw.rect(
+                screen,
+                (255, 80, 0),
+                (
+                    INVENTORY_WIDTH + attack.x + add[0],
+                    attack.y + add[1],
+                    attack.size_width,
+                    attack.size_hight
+                )
+            )
     
     # Draw weapon attacks
     if bullets[0] is not None:
@@ -1203,6 +1239,11 @@ def run():
                 player_1.x = a[0]
                 player_1.y = a[1]
                 enemies = aBoard.spawn()
+                bosses = aBoard.BossSpawn()
+                extraa = False
+                boss = None
+                if bosses is not None:
+                    boss = bosses
                 holding_attack = False
                 holding_super_attack = False
                 music.play_music("audio (1).mp3")
@@ -1261,8 +1302,9 @@ def run():
                         player_1.attack()
                     if holding_super_attack and player_1.current_super is None and player_1.super_charged:
                         player_1.super_attack()
-                    
-                    player_1.update_attacks(holding_attack, holding_super_attack)
+
+                    player_1.update_attacks(holding_attack, holding_super_attack, extraa)
+                    extraa = False
                     
                     #fall out the world death
                     if player_1.y > len(level) * 40:
@@ -1336,7 +1378,7 @@ def run():
                             
                             if player_1.current_super is not None:
                                 if player_1.current_super.is_touching_enemy(enemy.x, enemy.y):
-                                    enemy.take_damage(weapon_damage * 2)
+                                    enemy.take_damage(weapon_damage)
                                     player_1.coins += 10
                                     if enemy.hp <= 0:
                                         hit_by_weapon = True
@@ -1363,6 +1405,55 @@ def run():
                                 continue
                         
                             i += 1
+
+
+
+                        if bosses is not None:
+                            print(boss.hp)
+                            boss.update_vy()
+                            boss.run(player_1.x, player_1.y)
+
+                            weapon_damage = player_1.damage
+
+                            # Add weapon damage if equipped
+                            if player_1.equipped.get('weapon'):
+                                try:
+                                    weapon_item = Items.Item(player_1.equipped['weapon'])
+                                    weapon_damage += weapon_item.get_damage()
+                                except:
+                                    pass
+
+                            for attack_name in ("current_attack", "current_super"):
+                                attack = getattr(player_1, attack_name)
+                                if attack is not None and boss.is_touching_weapon(attack):
+                                    boss.take_damage(weapon_damage)
+                                    player_1.coins += 1
+                                    setattr(player_1, attack_name, None)
+                                    if boss.hp <= 0:
+                                        bosses = None
+                                        boss = None
+                                        break
+
+                            if bosses is not None:
+                                for attack in boss.attackCurrents[:]:
+                                    if boss.is_attack_touching_player(attack, player_1):
+                                        player_1.take_damage(1)
+                                        boss.attackCurrents.remove(attack)
+
+                                result = boss.isTouchingPlayer(player_1)
+                                if result == "stomp":
+                                    player_1.vy = -10
+                                    player_1.coins += 3
+                                    boss.take_damage(2)
+                                elif result == "hit":
+                                    if boss.contact_cooldown == 0:
+                                        player_1.take_damage(1)
+                                        boss.take_damage(1)
+                                        boss.contact_cooldown = 40
+
+                                if boss.hp <= 0:
+                                    bosses = None
+                                    boss = None
                     
                     #open chests
                     a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
@@ -1394,8 +1485,6 @@ def run():
                         'index': player_1.inventory_index[player_1.inventory_section]
                     }
 
-                    print("tick")
-
                     if ticks % LAVA_SPEED == 0:
                         level = aBoard.lava_tick()
                         player_1.level = level
@@ -1407,7 +1496,8 @@ def run():
                         bullets=[player_1.current_attack, player_1.current_super],
                         hp=player_1.hp, dam=dam, coins=player_1.coins,
                         enemies=enemies, inventory_data=inventory_data,
-                        player_width=player_1.width, player_hight=player_1.hight
+                        player_width=player_1.width, player_hight=player_1.hight,
+                        boss=boss if bosses is not None else None
                     )
                     pygame.display.flip()
                     clock.tick(40)

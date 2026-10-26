@@ -35,6 +35,18 @@ class Enemy(Player.player):
         return None
     
     def move(self, ticks):
+        def lava():
+            cngol = True
+            cngor = True
+
+            if list(self.level[(self.y + 55) // 40][self.x // 40])[0] == 'L':
+                cngol = False
+            elif list(self.level[(self.y + 55) // 40][(self.x + 55) // 40])[0] == 'L':
+                cngor = False
+
+            return (cngol, cngor)
+        
+
         if ticks % self.area < self.area / 2:
             left = True
             right = False
@@ -46,7 +58,7 @@ class Enemy(Player.player):
         if left:
             if not self.is_touching_wall_left(block, Or):
                 for i in range(self.speed):
-                    if not self.is_touching_wall_left(block, Or) or not self.is_touching_wall_left(block="L", Or=True):
+                    if not self.is_touching_wall_left(block, Or) and lava()[0]:
                         self.x -= 1
                     else:
                         pass
@@ -55,7 +67,7 @@ class Enemy(Player.player):
         if right:
             if not self.is_touching_wall_right(block, Or):
                 for i in range(self.speed):
-                    if not self.is_touching_wall_right(block, Or) or not self.is_touching_wall_right(block="L", Or=True):
+                    if not self.is_touching_wall_right(block, Or) and lava()[1]:
                         self.x += 1
                     else:
                         pass

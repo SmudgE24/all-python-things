@@ -10,6 +10,7 @@ from sympy import python
 import Enemies
 import Items
 import random
+import bosses
 random.seed() 
 class board:
     def __init__(self, level):
@@ -76,6 +77,16 @@ class board:
                     a.y = y * 40
                     spawns.append(a)
         return spawns
+
+    def BossSpawn(self):
+        for y in range(len(self.level)):
+            for x in range(len(self.level[y])):
+                if self.level[y][x] == "X":
+                    a = bosses.fire_boss(level=self.level)
+                    a.x = x *40
+                    a.y = y * 40 - (a.hight - 40)
+                    return a
+        return None
     
     def getPlayerBlocks(self, x, y):
         left = x // 40
