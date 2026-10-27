@@ -22,7 +22,7 @@ class player:
         self.x = 0
         self.y = 0
         self.width = 40
-        self.hight = 40
+        self.hight = 38
 
         self.level = level
 
@@ -48,19 +48,25 @@ class player:
         self.active_effects = Items.ItemEffect()  # Track active item effects
     
     def collect_coins(self):
-        if self.is_on_wall("C", True):
-            left = (self.x + 1) // 40
-            right = (self.x + self.width - 1) // 40
-            bottom = (self.y + self.hight + 1) // 40
-    
-            if self.level[bottom][left] == "C":
-                self.level[bottom][left] = "."
-    
-            if self.level[bottom][right] == "C":
-                self.level[bottom][right] = "."
-            self.coins += 1
-            return True
-        return False
+        collected = False
+
+        left = (self.x + 1) // 40
+        right = (self.x + self.width - 1) // 40
+        top = self.y // 40
+        bottom = (self.y + self.hight - 1) // 40
+
+        for row in range(top, bottom + 1):
+            for column in range(left, right + 1):
+
+                if 0 <= row < len(self.level):
+                    if 0 <= column < len(self.level[row]):
+
+                        if self.level[row][column] == "C":
+                            self.level[row][column] = "."
+                            self.coins += 1
+                            collected = True
+
+        return collected
 
     def move(self, left, right):
         Or = True
@@ -85,6 +91,30 @@ class player:
                     else:
                         pass
             self.going_left = False
+
+    def is_in_vines(self):
+        left = (self.x + 1) // 40
+        right = (self.x + self.width - 1) // 40
+        top = self.y // 40
+        bottom = (self.y + self.hight - 1) // 40
+
+        for row in range(max(0, top), min(len(self.level), bottom + 1)):
+            for column in range(max(0, left), min(len(self.level[row]), right + 1)):
+                if self.level[row][column] == "P":
+                    return True
+        return False
+
+    def climb_down(self):
+        if not self.is_in_vines():
+            return False
+
+        self.vy = 0
+        for _ in range(self.speed):
+            self.y += 1
+            if self.is_on_wall("B", True):
+                self.y -= 1
+                break
+        return True
 
     def jump(self):
         Or = True
@@ -129,7 +159,7 @@ class player:
     def is_on_wall(self, block, Or):
         left = (self.x + 1) // 40
         right = (self.x + self.width - 1) // 40
-        bottom = (self.y + self.hight + 1) // 40
+        bottom = (self.y + self.hight) // 40
 
         if block != "L":
             if bottom < 0 or bottom >= len(self.level):
@@ -430,7 +460,7 @@ class Pirate(player):
         self.super_charged = True
         self.current_attack = None
         self.current_super = None
-        self.hp = 3
+        self.hp = 10
         self.base_hp = self.hp
         self.speed = 7
         self.damage = 4
@@ -498,7 +528,7 @@ class Knight(player):
         self.super_charged = True
         self.current_attack = None
         self.current_super = None
-        self.hp = 99
+        self.hp = 15
         self.base_hp = self.hp
         self.speed = 4
         self.damage = 4

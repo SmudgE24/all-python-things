@@ -933,6 +933,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
         for x in range(len(level[y])):
             if level[y][x] == "B":
                 pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+            elif level[y][x] == "D":
+                pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
             elif str(level[y][x]).startswith("L"):
                 lava_number = int(level[y][x][1:])
                 lava_height = max(1, round(lava_number * (40 / 7)))
@@ -1258,6 +1260,8 @@ def run():
                             pygame.quit()
                             sys.exit()                    
                         if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_ESCAPE:
+                                player_1.hp = 0
                             if event.key == pygame.K_SPACE:
                                 player_1.jump()
                             if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
@@ -1293,6 +1297,8 @@ def run():
                         player_1.move(True, False)
                     if keys[pygame.K_RIGHT]:
                         player_1.move(False, True)
+                    if keys[pygame.K_DOWN]:
+                        player_1.climb_down()
                     
                     #fire
                     player_1.FireTick(ticks)
@@ -1495,6 +1501,16 @@ def run():
                         player_1.level = level
                         for i in range(len(enemies)):
                             enemies[i].level = level
+
+                    level = aBoard.lava_drain()
+
+                    if bosses is not None:
+                        boss.level = level
+
+                    player_1.level = level
+
+                    for i in range(len(enemies)):
+                        enemies[i].level = level
                     
                     screen = drawAll(
                         screen, level, player_x=player_1.x, player_y=player_1.y,

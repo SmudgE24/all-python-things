@@ -102,7 +102,18 @@ class board:
         
         return blocks
 
-
+    def lava_drain(self):
+        direc = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+        for y in range(len(self.level)):
+            for x in range(len(self.level[y])):
+                if self.level[y][x] == "D":
+                    for i in range(len(direc)):
+                        dx, dy = direc[i]
+                        nx, ny = x + dx, y + dy
+                        if 0 <= ny < len(self.level) and 0 <= nx < len(self.level[ny]):
+                            if str(self.level[ny][nx]).startswith("L"):
+                                self.level[ny][nx] = "."
+        return self.level
 
     def lava_tick(self):
         old_level = [row[:] for row in self.level]
