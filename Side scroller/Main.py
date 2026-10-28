@@ -5,6 +5,8 @@ Created on Sun Jun 14 15:17:58 2026
 
 @author: ethanbrown
 """
+import time
+
 import pygame
 import Player
 import Board
@@ -929,37 +931,57 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     # Draw game world shifted right by inventory width
     pygame.draw.rect(screen, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
     
-    for y in range(len(level)):
-        for x in range(len(level[y])):
+
+    # Only draw tiles that can appear on screen
+    start_y = max(0, int(-add[1] // 40))
+    end_y = min(len(level), int((720 - add[1] + 39) // 40))
+
+    start_x = max(0, int(-add[0] // 40))
+    end_x = min(len(level[0]), int((GAME_WIDTH - add[0] + 39) // 40))
+
+    for y in range(start_y, end_y):
+        for x in range(start_x, end_x):
             if level[y][x] == "B":
-                pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
             elif level[y][x] == "D":
-                pygame.draw.rect(screen, (0,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
             elif str(level[y][x]).startswith("L"):
                 lava_number = int(level[y][x][1:])
                 lava_height = max(1, round(lava_number * (40 / 7)))
+
                 lava_rect = pygame.Rect(
                     INVENTORY_WIDTH + x * 40 + add[0],
                     y * 40 + add[1] + 40 - lava_height,
                     40,
                     lava_height
                 )
+
                 pygame.draw.rect(screen, (155, 30, 4), lava_rect)
+
                 inner_rect = lava_rect.inflate(-4, -2)
+
                 if inner_rect.width > 0 and inner_rect.height > 0:
                     pygame.draw.rect(screen, (255, 92, 8), inner_rect)
+
                     surface_height = max(1, min(3, inner_rect.height // 2))
+
                     pygame.draw.rect(
                         screen,
                         (255, 204, 55),
                         (inner_rect.x + 2, inner_rect.y, inner_rect.width - 4, surface_height)
                     )
+
             elif level[y][x] == "C":
-                pygame.draw.rect(screen, (255,255,0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (255, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
             elif level[y][x] == "H":
-                pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
             elif level[y][x] == "P":
-                pygame.draw.rect(screen, (0, 55, 0), (INVENTORY_WIDTH + x*40+add[0], y*40+add[1], 40, 40))
+                pygame.draw.rect(screen, (0, 55, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
                         
     for i in range(len(bullets)):
         if bullets[i] is not None:
@@ -1250,6 +1272,10 @@ def run():
                 holding_super_attack = False
                 music.play_music("audio (1).mp3")
                 while running:
+
+                    simulation_start = time.perf_counter()
+
+
                     #helpfull for stomping on enemies heads
                     player_1.last_x = player_1.x
                     player_1.last_y = player_1.y
@@ -1511,6 +1537,11 @@ def run():
 
                     for i in range(len(enemies)):
                         enemies[i].level = level
+
+
+                    simulation_time = time.perf_counter() - simulation_start
+
+                    rendering_start = time.perf_counter()
                     
                     screen = drawAll(
                         screen, level, player_x=player_1.x, player_y=player_1.y,
@@ -1520,6 +1551,14 @@ def run():
                         player_width=player_1.width, player_hight=player_1.hight,
                         boss=boss if bosses is not None else None
                     )
+
+                    rendering_time = time.perf_counter() - rendering_start
+
+                    print(
+                        f"Simulation: {simulation_time * 1000:.2f} ms | "
+                        f"Rendering: {rendering_time * 1000:.2f} ms"
+                    )
+
                     pygame.display.flip()
                     clock.tick(40)
                     ticks += 1

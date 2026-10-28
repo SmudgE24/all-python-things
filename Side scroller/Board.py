@@ -115,86 +115,121 @@ class board:
                                 self.level[ny][nx] = "."
         return self.level
 
+
     def lava_tick(self):
         old_level = [row[:] for row in self.level]
+
         amounts = [
-            [int(tile[1:]) if str(tile).startswith("L") else 0 for tile in row]
+            [int(str(tile)[1:]) if str(tile).startswith("L") else 0 for tile in row]
             for row in old_level
         ]
+
         moved_down = [[0] * len(row) for row in old_level]
         received_down = [[0] * len(row) for row in old_level]
 
-        # Resolve gravity using the snapshot, so falling lava cannot fall again
-        # during this tick. Bottom-up capacity accounting prevents overfilling.
+        # Gravity: process from bottom to top
         for y in range(len(old_level) - 1, -1, -1):
             for x, tile in enumerate(old_level[y]):
-                if not str(tile).startswith("L") or y + 1 >= len(old_level):
+                if not str(tile).startswith("L"):
                     continue
 
-                below = old_level[y + 1][x] if x < len(old_level[y + 1]) else None
-                if below is None or below in ("B", "C", "H", "L7"):
+                if y + 1 >= len(old_level):
                     continue
 
-                below_amount = amounts[y + 1][x]
-                capacity = 7 - below_amount + moved_down[y + 1][x] - received_down[y + 1][x]
+                if x >= len(old_level[y + 1]):
+                    continue
+
+                below = old_level[y + 1][x]
+
+                if below in ("B", "C", "H", "L7"):
+                    continue
+
+                # Account for space created by lava moving down from this cell
+                capacity = (
+                    7
+                    - amounts[y + 1][x]
+                    + moved_down[y + 1][x]
+                    - received_down[y + 1][x]
+                )
+
                 moved = min(amounts[y][x], max(0, capacity))
+
                 moved_down[y][x] = moved
-                received_down[y + 1][x] = moved
+                received_down[y + 1][x] += moved
 
-        next_amounts = [row[:] for row in amounts]
-        for y, row in enumerate(old_level):
-            for x, tile in enumerate(row):
-                if str(tile).startswith("L"):
-                    next_amounts[y][x] -= moved_down[y][x]
-                    if y + 1 < len(old_level) and x < len(old_level[y + 1]):
-                        next_amounts[y + 1][x] += received_down[y + 1][x]
+        # Apply gravity together
+        next_amounts = [
+            [
+                amounts[y][x] - moved_down[y][x] + received_down[y][x]
+                for x in range(len(old_level[y]))
+            ]
+            for y in range(len(old_level))
+        ]
 
-        # Horizontal transfers are also decided from the snapshot and applied
-        # together, allowing every lava cell to move on the same tick.
-        lateral_moves = []
+        # Horizontal equalisation
+        # Each transfer moves one unit from a fuller cell to a lower cell
         for y, row in enumerate(old_level):
-            for x, tile in enumerate(row):
-                if not str(tile).startswith("L") or moved_down[y][x]:
+            for x in range(len(row) - 1):
+                left_tile = row[x]
+                right_tile = row[x + 1]
+
+                # Only lava and empty spaces can contain lava
+                if left_tile != "." and not str(left_tile).startswith("L"):
                     continue
+
+                if right_tile != "." and not str(right_tile).startswith("L"):
+                    continue
+
+                left_amount = next_amounts[y][x]
+                right_amount = next_amounts[y][x + 1]
+
+                # A difference of 0 or 1 is already approximately equal
+                if abs(left_amount - right_amount) < 2:
+                    continue
+
+                # Find the fuller cell and the lower cell
+                if left_amount > right_amount:
+                    source_x = x
+                    target_x = x + 1
+                else:
+                    source_x = x + 1
+                    target_x = x
+
+                # Only lava that was already present can spread sideways
+                if not str(row[source_x]).startswith("L"):
+                    continue
+
+                # Lava that moved down this tick cannot also spread sideways
+                if moved_down[y][source_x] > 0:
+                    continue
+
+                # Lava only spreads sideways when blocked below
                 if y + 1 < len(old_level):
-                    below = old_level[y + 1][x] if x < len(old_level[y + 1]) else None
-                    if below is not None and below not in ("B", "C", "H", "L7"):
-                        continue
+                    if source_x < len(old_level[y + 1]):
+                        below = old_level[y + 1][source_x]
 
-                for neighbor_x in (x + 1, x - 1):
-                    if not 0 <= neighbor_x < len(row):
-                        continue
-                    neighbor = old_level[y][neighbor_x]
-                    if neighbor == "." or (
-                        str(neighbor).startswith("L")
-                        and amounts[y][neighbor_x] < amounts[y][x] - 1
-                    ):
-                        lateral_moves.append((y, x, neighbor_x))
+                        if below not in ("B", "C", "H", "L7"):
+                            continue
 
-        lateral_out = [[0] * len(row) for row in old_level]
-        lateral_in = [[0] * len(row) for row in old_level]
-        for y, source_x, target_x in lateral_moves:
-            target_capacity = (
-                7 - next_amounts[y][target_x] + lateral_out[y][target_x]
-            )
-            if (
-                lateral_out[y][source_x] < amounts[y][source_x]
-                and lateral_in[y][target_x] < target_capacity
-            ):
-                lateral_out[y][source_x] += 1
-                lateral_in[y][target_x] += 1
+                # Transfer exactly one unit, preserving the L7 maximum
+                if (
+                    next_amounts[y][source_x] > 0
+                    and next_amounts[y][target_x] < 7
+                    and next_amounts[y][source_x]
+                        - next_amounts[y][target_x] >= 2
+                ):
+                    next_amounts[y][source_x] -= 1
+                    next_amounts[y][target_x] += 1
 
+        # Write the new lava levels back into the map
         for y, row in enumerate(old_level):
             for x, tile in enumerate(row):
-                next_amounts[y][x] += lateral_in[y][x] - lateral_out[y][x]
+                amount = next_amounts[y][x]
 
-        for y, row in enumerate(old_level):
-            for x, tile in enumerate(row):
-                if str(tile).startswith("L") or next_amounts[y][x]:
-                    self.level[y][x] = "L" + str(next_amounts[y][x])
+                if str(tile).startswith("L") or amount > 0:
+                    if amount <= 0:
+                        self.level[y][x] = "."
+                    else:
+                        self.level[y][x] = "L" + str(amount)
 
-        for y, row in enumerate(self.level):
-            for x, tile in enumerate(row):
-                if tile == "L0":
-                    self.level[y][x] = "."
         return self.level
