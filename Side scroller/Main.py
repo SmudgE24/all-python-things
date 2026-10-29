@@ -1311,7 +1311,7 @@ def run():
                                 player_1.hp = 0
                             if event.key == pygame.K_q:
                                 room1 = True
-                            if event.key == pygame.K_SPACE:
+                            if event.key == pygame.K_SPACE or event.key == pygame.K_w:
                                 player_1.jump()
                             if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
                                 holding_attack = True
@@ -1359,11 +1359,11 @@ def run():
                         
                     #movement
                     keys = pygame.key.get_pressed()
-                    if keys[pygame.K_LEFT]:
+                    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                         player_1.move(True, False)
-                    if keys[pygame.K_RIGHT]:
+                    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
                         player_1.move(False, True)
-                    if keys[pygame.K_DOWN]:
+                    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
                         player_1.climb_down()
 
                     aBoard.level = level
