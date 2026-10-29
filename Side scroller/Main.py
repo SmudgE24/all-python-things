@@ -17,6 +17,7 @@ import sys
 import os
 import sys
 import traceback
+import Generator
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -26,6 +27,16 @@ CHARACTER_CLASSES = {
     "Knight": Player.Knight,
     "Pirate": Player.Pirate
 }
+
+def get_sign_text(level_name, place):
+    with open(os.path.join("texts.json"), "r") as file:
+        signs = json.load(file)
+
+    for sign_name, sign_data in signs.items():
+        if sign_data["level"] == level_name and sign_data["place"] == list(place):
+            return sign_data["text"]
+
+    return None
 
 def load_settings():
     with open(SETTINGS_PATH, "r") as file:
@@ -1224,6 +1235,8 @@ def run():
                 ) as file:
                     level = [list(line.rstrip('\r\n')) for line in file]
 
+                level_name = f"level{levelNo}"
+
                 print("Lava positions:")
 
                 for y in range(len(level)):
@@ -1271,6 +1284,14 @@ def run():
                 holding_attack = False
                 holding_super_attack = False
                 music.play_music("audio (1).mp3")
+
+                room1 = False
+                room2 = False
+
+                text_show = False
+
+                Generator.run(f"level{str(levelNo + 1)}")
+
                 while running:
 
                     simulation_start = time.perf_counter()
@@ -1288,6 +1309,8 @@ def run():
                         if event.type == pygame.KEYDOWN:
                             if event.key == pygame.K_ESCAPE:
                                 player_1.hp = 0
+                            if event.key == pygame.K_q:
+                                room1 = True
                             if event.key == pygame.K_SPACE:
                                 player_1.jump()
                             if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
@@ -1295,15 +1318,32 @@ def run():
                             if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
                                 holding_super_attack = True
                             if event.key == pygame.K_c:
-                                player_1.use_item(enemies)
+                                player_1.use_item(enemies + ([boss] if boss is not None else []))
                             if event.key == pygame.K_v:
                                 player_1.switch_inventory_section()
+                            if event.key == pygame.K_e:
+                                pos = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
+                                found_sign = False
+
+                                for tile in pos:
+                                    try:
+                                        if level[tile[1]][tile[0]] == "s":
+                                            text_show = not text_show
+                                            found_sign = True
+                                            break
+                                    except (IndexError, TypeError):
+                                        pass
+
+                                if not found_sign:
+                                    text_show = False
                             
                         if event.type == pygame.KEYUP:
                             if event.key == pygame.K_LCTRL or event.key == pygame.K_z:
                                 holding_attack = False
                             if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
                                 holding_super_attack = False
+                            if event.key == pygame.K_q:
+                                room1 = False
                                     
                         if event.type == pygame.MOUSEWHEEL:
                             if event.y > 0:
@@ -1315,7 +1355,7 @@ def run():
                             if event.button == 2:  # Middle mouse button
                                 player_1.switch_inventory_section()
                             elif event.button == 1:  # Left mouse button to equip
-                                player_1.equip_item(enemies)
+                                player_1.equip_item(enemies + ([boss] if boss is not None else []))
                         
                     #movement
                     keys = pygame.key.get_pressed()
@@ -1325,13 +1365,27 @@ def run():
                         player_1.move(False, True)
                     if keys[pygame.K_DOWN]:
                         player_1.climb_down()
+
+                    aBoard.level = level
+
+                    if bosses is not None:
+                        boss.level = level
+                    
+                    player_1.level = level
+                    
+                    for i in range(len(enemies)):
+                        enemies[i].level = level
                     
                     #fire
                     player_1.FireTick(ticks)
                     
                     #weapon attacks
-                    if holding_attack and player_1.current_attack is None:
+                    if player_1.attack_cooldown > 0:
+                        player_1.attack_cooldown -= 1
+                    if (holding_attack and player_1.current_attack is None
+                            and player_1.attack_cooldown == 0):
                         player_1.attack()
+                        player_1.attack_cooldown = player_1.attack_interval()
                     if holding_super_attack and player_1.current_super is None and player_1.super_charged:
                         player_1.super_attack()
 
@@ -1343,8 +1397,9 @@ def run():
                         player_1.hp = 0
                     
                     #collect coins
-                    if player_1.collect_coins():
-                        player_1.recharge_super(1)
+                    coins_collected = player_1.collect_coins()
+                    if coins_collected:
+                        player_1.recharge_super(coins_collected)
                         
                     #damage flash, no, not that type
                     if settings["settings"][2]["checked"] == True:
@@ -1364,6 +1419,8 @@ def run():
                         round = death_result[0]
                         runwin = death_result[1]
                         won = False
+                    elif player_1.hp > lastHp:
+                        lastHp = player_1.hp
                     
                     #End level
                     if player_1.is_on_wall(block="E", Or=True):
@@ -1376,7 +1433,7 @@ def run():
                     if player_1.timefrozen:
                         if player_1.timefrozenat is None:
                             player_1.timefrozenat = ticks
-                        elif ticks - player_1.timefrozenat >= (40 * 15):  # 15 seconds at 40 ticks per second
+                        elif ticks - player_1.timefrozenat >= (40 * player_1.timefrozen_duration):
                             player_1.timefrozen = False
                             player_1.timefrozenat = None
             
@@ -1391,29 +1448,23 @@ def run():
                         
                             # Check weapon hits
                             hit_by_weapon = False
-                            weapon_damage = player_1.damage
-                            
-                            # Add weapon damage if equipped
-                            if player_1.equipped.get('weapon'):
-                                try:
-                                    weapon_item = Items.Item(player_1.equipped['weapon'])
-                                    weapon_damage += weapon_item.get_damage()
-                                except:
-                                    pass
+                            weapon_damage = player_1.get_attack_damage()
                             
                             if player_1.current_attack is not None:
                                 if player_1.current_attack.is_touching_enemy(enemy.x, enemy.y):
                                     enemy.take_damage(weapon_damage)
-                                    player_1.coins += 5
+                                    player_1.gain_coins(5)
                                     if enemy.hp <= 0:
                                         hit_by_weapon = True
+                                        player_1.killed_enemies()
                             
                             if player_1.current_super is not None:
                                 if player_1.current_super.is_touching_enemy(enemy.x, enemy.y):
                                     enemy.take_damage(weapon_damage)
-                                    player_1.coins += 10
+                                    player_1.gain_coins(10)
                                     if enemy.hp <= 0:
                                         hit_by_weapon = True
+                                        player_1.killed_enemies()
                             
                             if hit_by_weapon:
                                 enemies.pop(i)
@@ -1423,17 +1474,20 @@ def run():
                         
                             if result == "stomp":
                                 player_1.vy = -10
-                                player_1.coins += 3
+                                player_1.gain_coins(3)
                                 enemies.pop(i)
+                                player_1.killed_enemies()
                                 continue
                         
                             elif result == "hit":
                                 player_1.take_damage(1)
                                 enemies.pop(i)
+                                player_1.killed_enemies()
                                 continue
             
                             if enemy.hp <= 0:
                                 enemies.pop(i)
+                                player_1.killed_enemies()
                                 continue
                         
                             i += 1
@@ -1447,24 +1501,17 @@ def run():
 
                             boss.being_damaged = False
 
-                            weapon_damage = player_1.damage
-
-                            # Add weapon damage if equipped
-                            if player_1.equipped.get('weapon'):
-                                try:
-                                    weapon_item = Items.Item(player_1.equipped['weapon'])
-                                    weapon_damage += weapon_item.get_damage()
-                                except:
-                                    pass
+                            weapon_damage = player_1.get_attack_damage()
 
                             for attack_name in ("current_attack", "current_super"):
                                 attack = getattr(player_1, attack_name)
                                 if attack is not None and boss.is_touching_weapon(attack):
                                     boss.take_damage(weapon_damage)
-                                    player_1.coins += 1
+                                    player_1.gain_coins(1)
                                     setattr(player_1, attack_name, None)
                                     boss.being_damaged = True
                                     if boss.hp <= 0:
+                                        player_1.killed_enemies()
                                         bosses = None
                                         boss = None
                                         break
@@ -1478,7 +1525,7 @@ def run():
                                 result = boss.isTouchingPlayer(player_1)
                                 if result == "stomp":
                                     player_1.vy = -10
-                                    player_1.coins += 3
+                                    player_1.gain_coins(3)
                                     boss.take_damage(2)
                                     boss.being_damaged = True
                                 elif result == "hit":
@@ -1489,6 +1536,7 @@ def run():
                                         boss.being_damaged = True
 
                                 if boss.hp <= 0:
+                                    player_1.killed_enemies()
                                     bosses = None
                                     boss = None
                     
@@ -1500,13 +1548,13 @@ def run():
                                 aBoard.setPoint(a[i][0], a[i][1], tile=".")
                                 contents = aBoard.find_chest_contents()
                                 if contents[0] == "10 Coins":
-                                    player_1.coins += 10
-                                    player_1.recharge_super(10)
+                                    coins_gained = player_1.gain_coins(10)
+                                    player_1.recharge_super(coins_gained)
                                 else:
                                     player_1.AppendInventory(contents[0])
                                 if contents[1] == "10 Coins":
-                                    player_1.coins += 10
-                                    player_1.recharge_super(10)
+                                    coins_gained = player_1.gain_coins(10)
+                                    player_1.recharge_super(coins_gained)
                                 else:
                                     player_1.AppendInventory(contents[1])
                         except IndexError:
@@ -1538,6 +1586,61 @@ def run():
                     for i in range(len(enemies)):
                         enemies[i].level = level
 
+                    surrounding_tiles = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
+
+                    room2 = False
+                    for tile in surrounding_tiles:
+                        try:
+                            if level[tile[1]][tile[0]] == "R":
+                                print("I found a secret room on level", levelNo, "at coordinates:", tile[0], tile[1])
+                                room2 = True
+                                if room2 and (room1 or player_1.secret_room_unlocked):
+                                    print("Player has entered the secret room on level", levelNo)
+                                    player_1.recharge_super(50)
+                                    player_1.x = 200
+                                    player_1.y = 200
+                                    room1 = False
+                                    room2 = False
+                                    player_1.secret_room_unlocked = False
+                                    room = None
+
+                                    with open(os.path.join("assets", "levels", "secret rooms.txt"), "r") as file:
+                                        for line in file:
+                                            line = line.strip()
+
+                                            if line.startswith(str(levelNo)):
+                                                room = line[len(str(levelNo)):] + ".txt"
+                                                break
+                                    with open(
+                                        os.path.join(BASE_DIR, 'assets', 'levels', room),
+                                        'r'
+                                    ) as file:
+                                            level = [list(line.rstrip('\r\n')) for line in file]
+                                            level_name = room[:-4]
+                                    levelNo -= 1
+                                pass
+                        except IndexError:
+                            pass
+                    
+                    if text_show:
+                        font = pygame.font.SysFont(None, 30)
+                        text = font.render("Press E to hide this text", True, (255, 255, 255))
+                        screen.blit(text, (10, 10))
+                        pos = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
+                        for i in range(len(pos)):
+                            if level[pos[i][1]][pos[i][0]] == "s":
+                                write = get_sign_text(
+                                    level_name,
+                                (tile[0], tile[1])
+                                )
+                        text = font.render(write, True, (255, 255, 255))
+                        screen.blit(text, (10, 100))
+
+                    aBoard.rarity_weights = {"common": 60, "uncommon": 30, "rare": 10, "very rare": 1}
+                    aBoard.rarity_weights["common"] += 1*player_1.luck
+                    aBoard.rarity_weights["uncommon"] += 2*player_1.luck
+                    aBoard.rarity_weights["rare"] += 3*player_1.luck
+                    aBoard.rarity_weights["very rare"] += 4*player_1.luck
 
                     simulation_time = time.perf_counter() - simulation_start
 
@@ -1551,6 +1654,35 @@ def run():
                         player_width=player_1.width, player_hight=player_1.hight,
                         boss=boss if bosses is not None else None
                     )
+
+                    if text_show:
+                        screen.fill((0, 0, 0))
+
+                        font = pygame.font.SysFont(None, 30)
+
+                        text = font.render("Press E to hide this text", True, (255, 255, 255))
+                        screen.blit(text, (10, 10))
+
+                        write = "No sign text found."
+
+                        pos = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
+
+                        for tile in pos:
+                            try:
+                                if level[tile[1]][tile[0]] == "s":
+                                    write = get_sign_text(
+                                        level_name,
+                                        (tile[0], tile[1])
+                                    )
+                                    break
+                            except IndexError:
+                                pass
+
+                        if write is None:
+                            write = "No sign text found."
+
+                        text = font.render(write, True, (255, 255, 255))
+                        screen.blit(text, (10, 100))
 
                     rendering_time = time.perf_counter() - rendering_start
 

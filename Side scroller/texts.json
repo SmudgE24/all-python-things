@@ -1,0 +1,12 @@
+{
+    "devroom_joke": {
+        "level": "devroom",
+        "place": [5, 8],
+        "text": "Congratulations! You have wasted your time."
+    },
+    "secret_message": {
+        "level": "level1",
+        "place": [15, 7],
+        "text": "The developer was here. They regret nothing."
+    }
+}

@@ -30,6 +30,7 @@ class board:
                     self.fires.append((j, i))
                 elif level[i][j] == 'H':
                     self.chests.append((j, i))
+        self.rarity_weights = {"common": 60, "uncommon": 30, "rare": 10, "very rare": 1}
     
     def find_chest_contents(self):
         """Generate random chest contents from the item database"""
@@ -37,19 +38,19 @@ class board:
         rarities = [Items.ITEMS_DB[name].get("rarity", "common") for name in item_names]
         
         # Weight items by rarity (common=60, uncommon=30, rare=10, very rare=1)
-        rarity_weights = {"common": 60, "uncommon": 30, "rare": 10, "very rare": 1}
-        weights = [rarity_weights.get(r, 10) for r in rarities]
+        
+        weights = [self.rarity_weights.get(r, 10) for r in rarities]
         
         total_weight = sum(weights)
         
         # Pick 2 random items
         two_items = []
         for _ in range(2):
-            pick = random.randint(0, total_weight)
+            pick = random.randrange(total_weight)
             current_weight = 0
             for i, weight in enumerate(weights):
                 current_weight += weight
-                if pick <= current_weight:
+                if pick < current_weight:
                     two_items.append(item_names[i])
                     break
         

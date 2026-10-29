@@ -5,17 +5,31 @@ Created on Tue Jun 30 18:29:29 2026
 
 @author: ethanbrown
 """
+import random
 import Items
 
 class player:
     def __init__(self, level, jumpmax, hp):
         self.timefrozen = False
         self.timefrozenat = None
+        self.timefrozen_duration = 15
         self.on_fire_for = None
         self.on_fire = False
         self.coins = 0
         self.jumps = 0
         self.going_left = False
+
+        self.coin_chance = 0
+        self.coin_multiplier = 1
+        self.secret_room_unlocked = False
+
+        self.resistance = 0
+        self.lava_resistance = 0
+
+        self.luck = 0
+
+        self.revive = 2
+        self.start_hp = hp
 
         self.vy = 0
 
@@ -30,6 +44,8 @@ class player:
         self.hp = hp
         self.max_hp = 99
 
+        self.health_on_kill = 0
+
         self.gravity = 1
 
         self.inventory = {'armour':[], 
@@ -42,13 +58,16 @@ class player:
         self.equipped = {'weapon': None, 'armour': None, 'item': None}
         self.armour_durability = {'armour': 0, 'item': 0}  # Track armour protection
         self.base_speed = 5
+        self.speed_bonus = 0
         self.speed = self.base_speed
         self.damage = 1  # Base damage
+        self.damage_multiplier = 1
+        self.attack_cooldown = 0
         self.void_immune = False  # Immunity to void damage
         self.active_effects = Items.ItemEffect()  # Track active item effects
     
     def collect_coins(self):
-        collected = False
+        coins_collected = 0
 
         left = (self.x + 1) // 40
         right = (self.x + self.width - 1) // 40
@@ -63,10 +82,38 @@ class player:
 
                         if self.level[row][column] == "C":
                             self.level[row][column] = "."
-                            self.coins += 1
-                            collected = True
+                            coins_collected += self.gain_coins(1)
+                            
+                            self.coin_chance = min(100, self.coin_chance)
+                            if random.randrange(100) < self.coin_chance:
+                                coins_collected += self.gain_coins(1)
+                                print("Bonus coin collected!")
+        
+        return coins_collected
 
-        return collected
+    def gain_coins(self, amount):
+        gained = int(amount * self.coin_multiplier)
+        self.coins += gained
+        return gained
+
+    def attack_interval(self):
+        weapon_name = self.equipped.get("weapon")
+        attack_speed = Items.ITEMS_DB.get(weapon_name, {}).get("attack_speed", 1)
+        return max(1, round(40 / attack_speed))
+
+    def get_attack_damage(self):
+        weapon_damage = 0
+        if self.equipped.get("weapon"):
+            weapon_damage = Items.Item(self.equipped["weapon"]).get_damage()
+        return round((self.damage + weapon_damage) * self.damage_multiplier)
+
+    def killed_enemies(self):
+        if self.health_on_kill > 5:
+            self.health_on_kill = 5
+        if self.health_on_kill > 0:
+            self.hp += self.health_on_kill
+            if self.hp > self.max_hp:
+                self.hp = self.max_hp
 
     def move(self, left, right):
         Or = True
@@ -287,13 +334,34 @@ class player:
             if self.armour_durability['item'] == 0 and self.equipped['item']:
                 print(f"{self.equipped['item']} broke!")
                 self.equipped['item'] = None
-        
+
+
+        if self.resistance > 0:
+            if remaining_damage > self.resistance:
+                remaining_damage -= self.resistance
+                self.resistance = 0
+            elif remaining_damage <= self.resistance:
+                self.resistance -= remaining_damage
+                remaining_damage = 0
         # Apply remaining damage to hp
         self.hp -= remaining_damage
 
     def death(self):
         if self.hp <= 0:
-            return True
+            if self.revive > 0:
+                self.revive -= 1
+                self.hp = self.start_hp
+                print("Player revived!")
+                level = self.level
+                for y in range(len(level)):
+                    for x in range(len(level[y])):
+                        if level[y][x] == "S":
+                            self.x = x * 40
+                            self.y = y * 40
+                
+                return False  # Player revived, not dead
+            else:
+                return True
         else:
             return False
 
@@ -323,6 +391,15 @@ class player:
         current_items = self.inventory[section]
         if not current_items:
             return
+        if len(current_items) <= 25:
+            current_index = min(
+                max(self.inventory_index[section], 0),
+                len(current_items) - 1
+            )
+            self.inventory_index[section] = (
+                current_index + direction
+            ) % len(current_items)
+            return
         self.inventory_index[section] += direction
         #self.inventory_index[section] %= len(current_items)
         print(self.inventory[self.inventory_section][-1])
@@ -350,13 +427,24 @@ class player:
         section = self.inventory_section
         items = self.inventory[section]
         if not items:
-            return
-        selected_item = items[self.inventory_index[section] % len(items)]
+            return False
+        if section == "item":
+            return self.use_item(enemies)
+
+        index = min(max(self.inventory_index[section], 0), len(items) - 1)
+        self.inventory_index[section] = index
+        selected_item = items[index]
+        item = Items.Item(selected_item)
+        if item.get_effect() and item.apply_effect(self, enemies):
+            items.pop(index)
+            self.inventory_index[section] = min(index, len(items) - 1) if items else 0
+            return True
         self.equipped[section] = selected_item
         self._apply_item_effects(enemies,selected_item)
+        return True
     
     def _apply_item_effects(self, enemies, item_name=None):
-        self.speed = self.base_speed
+        self.speed = self.base_speed + self.speed_bonus
         self.armour_durability = {'armour': 0, 'item': 0}
         
         # Apply weapon effects
@@ -401,53 +489,50 @@ class player:
         section = self.inventory_section
         items = self.inventory[section]
         if not items:
-            return
-        try:
-            selected_item = items[self.inventory_index[section]]
-        except IndexError:
-            return
+            return False
 
-        try:
-            item = Items.Item(selected_item)
-            effect = item.get_effect()
-            
-            # Only consumable items can be used
-            if effect in ['heal', 'jump_boost', 'power_boost', 'speed_teleport', 'time_freeze', 'explosive']:
-                used = item.apply_effect(self, enemies)
-                if used:
-                    items.remove(selected_item)
-                    self.inventory_index[section] = min(self.inventory_index[section], len(items) - 1) if items else 0
-                    return True
-        except (TypeError, ValueError):
-            pass
-        return False
+        index = min(max(self.inventory_index[section], 0), len(items) - 1)
+        self.inventory_index[section] = index
+        selected_item = items[index]
+        item = Items.Item(selected_item)
+        if item.get_effect() is None:
+            return False
+
+        if not item.apply_effect(self, enemies):
+            return False
+
+        items.pop(index)
+        self.inventory_index[section] = min(index, len(items) - 1) if items else 0
+        return True
     
     def FireTick(self, ticks):
         if self.on_fire:
             if ticks % 40 == 0:
-                self.take_damage(1)
+                if self.lava_resistance > 0:
+                    self.lava_resistance -= 1
+                else:
+                    self.take_damage(1)
             if self.on_fire_for is not None:
                 self.on_fire_for += 1
             else:
                 self.on_fire_for = 1
             
-            if self.on_fire_for == 85:
+            if self.on_fire_for == 95:
                 self.on_fire = False
         if self.is_on_wall(block="L", Or=True):
             self.on_fire = True
             self.on_fire_for = None
 
-    def trigger_explosion(self, enemies):
+    def trigger_explosion(self, enemies, damage=5):
         """Trigger an explosion effect around the player"""
         explosion_radius = 80  # 2 blocks in each direction
-        explosion_damage = 3
         
         # Check for enemies within the explosion radius
         for enemy in enemies:
             if (abs(enemy.x - self.x) <= explosion_radius and 
                 abs(enemy.y - self.y) <= explosion_radius):
-                enemy.take_damage(explosion_damage)
-                print(f"Enemy at ({enemy.x}, {enemy.y}) took {explosion_damage} damage from explosion!")
+                enemy.take_damage(damage)
+                print(f"Enemy at ({enemy.x}, {enemy.y}) took {damage} damage from explosion!")
         
         # Optionally, you can also affect the environment (e.g., destroy blocks)
         # This part can be implemented based on your game's mechanics
@@ -472,7 +557,7 @@ class Pirate(player):
         self.equipped['weapon'] = "Sword +1"
         self.base_speed = 7
         self.speed = 7
-        self.max_hp = 3
+        self.max_hp = self.hp
         self.armour_durability = {'armour': 0, 'item': 0}
     
     def attack(self):
@@ -480,6 +565,7 @@ class Pirate(player):
         print(self.equipped['weapon'])
         attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
         self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+        self.current_attack.direction = -1 if self.going_left else 1
     
     #def use_ability(self):
     
@@ -500,13 +586,15 @@ class Pirate(player):
             self.current_super = None
         a = False
         if self.current_attack is not None:
-            if self.equipped['weapon'] == 'Flame Gun':
-                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
-            elif self.equipped['weapon'] == 'Bow':
+            self.current_attack.direction = -1 if self.going_left else 1
+            if self.current_attack.attack_type == "ranged":
                 self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
                 a = self.current_attack.move()
+            elif self.current_attack.attack_type == "Stab":
+                attack_x = self.x - self.current_attack.size_width if self.going_left else self.x + self.width
+                a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
             else:
-                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+                a = self.current_attack.move(self.x + self.width, self.y + self.hight // 2, self.x, self.y)
         if self.current_super is not None:
             self.current_super.move()
 
@@ -548,6 +636,7 @@ class Knight(player):
         print(self.equipped['weapon'])
         attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
         self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+        self.current_attack.direction = -1 if self.going_left else 1
     
     #def use_ability(self):
     
@@ -568,13 +657,15 @@ class Knight(player):
             self.current_super = None
         a = False
         if self.current_attack is not None:
-            if self.equipped['weapon'] == 'Flame Gun':
-                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
-            elif self.equipped['weapon'] == 'Bow':
+            self.current_attack.direction = -1 if self.going_left else 1
+            if self.current_attack.attack_type == "ranged":
                 self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
                 a = self.current_attack.move()
+            elif self.current_attack.attack_type == "Stab":
+                attack_x = self.x - self.current_attack.size_width if self.going_left else self.x + self.width
+                a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
             else:
-                a = self.current_attack.move(self.x+40, self.y+20, self.x, self.y)
+                a = self.current_attack.move(self.x + self.width, self.y + self.hight // 2, self.x, self.y)
         if self.current_super is not None:
             self.current_super.move(self.x+40, self.y+20, self.x, self.y)
 
@@ -600,6 +691,7 @@ class weapon:
         self.attack_type = attack_type
         self.positions = None
         self.expired = False
+        self.direction = 1
     
     def move(self, moveto_x=None, moveto_y=None, player_x=None, player_y=None):
         if self.attack_type == "Stab":
@@ -621,14 +713,14 @@ class weapon:
             )
 
             fire_pos = [
-                [1, 0],
-                [1, 1],
-                [1, -1],
-                [2, 0],
-                [2, 1],
-                [2, -1],
-                [2, 2],
-                [2, -2]
+                [self.direction, 0],
+                [self.direction, 1],
+                [self.direction, -1],
+                [self.direction * 2, 0],
+                [self.direction * 2, 1],
+                [self.direction * 2, -1],
+                [self.direction * 2, 2],
+                [self.direction * 2, -2]
             ]
 
             self.positions = []
@@ -664,6 +756,7 @@ class weapon:
                     fire_x, fire_y = self.positions[i][0], self.positions[i][1]
                     if ((fire_x * 40 < (enemy_x + 40) and (fire_x * 40 + 40) > enemy_x) and 
                         (fire_y * 40 < (enemy_y + 40) and (fire_y * 40 + 40) > enemy_y)):
+                        self.expired = True
                         return True
         elif self.attack_type == "ranged":
             if ((self.x < (enemy_x + 40) and (self.x + self.size_width) > enemy_x) and 

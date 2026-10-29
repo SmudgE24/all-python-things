@@ -6,7 +6,7 @@ import os
 # ==========================================
 
 LEVEL_LENGTH = 400       # Horizontal length of the level
-HEIGHT_PER_ROUTE = 20    # Height of each individual cave
+HEIGHT_PER_ROUTE = 25    # Height of each individual cave
 ROUTE_COUNT = 5          # Number of stacked cave routes
 
 WIDTH = LEVEL_LENGTH
@@ -116,23 +116,42 @@ def generate_level_file(filename="random_level.txt"):
                         ):
                             grid[current_y][x] = VINE
 
+
         # 7. Generate jumping platforms
+
+        # Seven possible heights for platforms
+        platform_heights = []
+
+        for y in range(offset + 9, offset + 16):
+            platform_heights.append(y)
+
         last_platform_x = 12
         last_platform_y = offset + 13
 
+        # Start with a larger gap between platforms
+        next_platform_gap = random.randint(5, 7)
+
         for x in range(12, WIDTH - 12):
 
-            force_spawn = (x - last_platform_x) >= 4
+            # Leave more space between platforms
+            force_spawn = (x - last_platform_x) >= next_platform_gap
 
-            min_y = max(offset + 11, last_platform_y - 2)
-            max_y = min(offset + 14, last_platform_y + 2)
+            # Only allow heights that can reasonably be reached
+            possible_heights = []
 
-            for y in range(min_y, max_y + 1):
+            for y in platform_heights:
+
+                if abs(y - last_platform_y) <= 2:
+                    possible_heights.append(y)
+
+            # Try to spawn a platform
+            for y in possible_heights:
 
                 if (
                     grid[y][x] == AIR
                     and grid[y + 1][x] == AIR
                     and grid[y - 1][x] == AIR
+                    and grid[y - 2][x] == AIR
                 ):
 
                     if (
@@ -140,32 +159,44 @@ def generate_level_file(filename="random_level.txt"):
                         and grid[y - 1][x] != VINE
                     ):
 
-                        if random.random() < 0.14 or force_spawn:
+                        if random.random() < 0.10 or force_spawn:
 
-                            if (
-                                grid[y - 1][x] == AIR
-                                and grid[y - 2][x] == AIR
-                            ):
+                            # Wider platforms give the player
+                            # more room to land
+                            width_span = random.randint(3, 5)
 
-                                width_span = random.randint(2, 4)
+                            platform_placed = False
 
-                                for w in range(width_span):
+                            for w in range(width_span):
 
-                                    if (
-                                        x + w < WIDTH - 12
-                                        and grid[y][x + w] in [AIR, VINE]
-                                    ):
+                                if x + w >= WIDTH - 12:
+                                    break
 
-                                        if (
-                                            grid[y - 1][x + w] in [AIR, VINE]
-                                            and grid[y - 2][x + w] in [AIR, VINE]
-                                        ):
-                                            grid[y][x + w] = BLOCK
+                                if (
+                                    grid[y][x + w] in [AIR, VINE]
+                                    and grid[y - 1][x + w] in [AIR, VINE]
+                                    and grid[y - 2][x + w] in [AIR, VINE]
+                                ):
+
+                                    grid[y][x + w] = BLOCK
+                                    platform_placed = True
+
+                                else:
+                                    break
+
+                            # Only update the position if
+                            # we actually created a platform
+                            if platform_placed:
 
                                 last_platform_x = x + width_span
                                 last_platform_y = y
 
+                                # Vary the distance to the
+                                # next platform
+                                next_platform_gap = random.randint(5, 7)
+
                                 break
+
 
         # 8. Generate enemies, coins and chests
         for y in range(playable_top, playable_bottom + 1):
@@ -184,7 +215,7 @@ def generate_level_file(filename="random_level.txt"):
 
                         spawn_roll = random.random()
 
-                        respective_probabilities = [0.04, 0.06, 0.02]# Coin, Enemy, Chest
+                        respective_probabilities = [0.04, 0.08, 0.02]# Coin, Enemy, Chest
                         real_probabilities = []
                         no = 0
                         for p in respective_probabilities:
@@ -296,17 +327,18 @@ def generate_level_file(filename="random_level.txt"):
 # RUN THE GENERATOR
 # ==========================================
 
-SCRIPT_DIR = (
-    os.path.dirname(os.path.abspath(__file__))
-    if os.path.dirname(os.path.abspath(__file__))
-    else "."
-)
+def run(place):
+    SCRIPT_DIR = (
+        os.path.dirname(os.path.abspath(__file__))
+        if os.path.dirname(os.path.abspath(__file__))
+        else "."
+    )
 
-OUTPUT_PATH = os.path.join(
-    SCRIPT_DIR,
-    "assets",
-    "levels",
-    "level1.txt"
-)
+    OUTPUT_PATH = os.path.join(
+        SCRIPT_DIR,
+        "assets",
+        "levels",
+        f"{place}.txt"
+    )
 
-generate_level_file(OUTPUT_PATH)
+    generate_level_file(OUTPUT_PATH)

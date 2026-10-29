@@ -39,10 +39,13 @@ class Enemy(Player.player):
             cngol = True
             cngor = True
 
-            if list(self.level[(self.y + 55) // 40][self.x // 40])[0] == 'L' or list(self.level[(self.y + 55) // 40][self.x // 40])[0] == '.':
-                cngol = False
-            elif list(self.level[(self.y + 55) // 40][(self.x + 55) // 40])[0] == 'L' or list(self.level[(self.y + 55) // 40][(self.x + 55) // 40])[0] == '.':
-                cngor = False
+            try:
+                if list(self.level[(self.y + 55) // 40][self.x // 40])[0] == 'L' or list(self.level[(self.y + 55) // 40][self.x // 40])[0] == '.':
+                    cngol = False
+                elif list(self.level[(self.y + 55) // 40][(self.x + 55) // 40])[0] == 'L' or list(self.level[(self.y + 55) // 40][(self.x + 55) // 40])[0] == '.':
+                    cngor = False
+            except IndexError:
+                pass
 
             return (cngol, cngor)
         
