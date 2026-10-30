@@ -21,6 +21,8 @@ CHEST = 'H'
 START = 'S'
 END = 'E'
 VINE = 'P'
+SULFUR = 'M'       # Sulfur deposit; game code can make it emit rising smoke
+LAVA_DRIPPER = 'D' # Ceiling hazard; game code can make it drip lava
 
 
 def generate_level_file(filename="random_level.txt", difficulty=1):
@@ -270,6 +272,63 @@ def generate_level_file(filename="random_level.txt", difficulty=1):
         # 11. Place an exit at the far-right end of each route
         grid[offset + 17][WIDTH - 1] = END
 
+        # 12. Generate sulfur deposits (M).
+        # M occupies an air tile directly above a solid B tile.
+        # Deposits are preferentially placed beside lava pools.
+        sulfur_candidates = []
+        for sulfur_y in range(playable_top, floor_y):
+            for sulfur_x in range(13, WIDTH - 13):
+                if (
+                    grid[sulfur_y][sulfur_x] == AIR
+                    and grid[sulfur_y + 1][sulfur_x] == BLOCK
+                ):
+                    near_lava = False
+                    for nearby_x in range(max(0, sulfur_x - 3), min(WIDTH, sulfur_x + 4)):
+                        for nearby_y in range(offset + 15, min(offset + 19, HEIGHT)):
+                            if grid[nearby_y][nearby_x] == LAVA:
+                                near_lava = True
+                                break
+                        if near_lava:
+                            break
+
+                    # Prioritise locations close to lava, but retain some
+                    # deposits elsewhere so sulfur is not exclusive to pools.
+                    sulfur_candidates.append((sulfur_x, sulfur_y, near_lava))
+
+        random.shuffle(sulfur_candidates)
+        sulfur_candidates.sort(key=lambda candidate: candidate[2], reverse=True)
+
+        sulfur_count = random.randint(2, 4) + difficulty // 10
+        sulfur_placed = 0
+        for sulfur_x, sulfur_y, near_lava in sulfur_candidates:
+            if sulfur_placed >= sulfur_count:
+                break
+
+            # Keep deposits spread apart and avoid placing them on top
+            # of one another or too close to another deposit.
+            if any(
+                grid[check_y][check_x] == SULFUR
+                for check_x in range(max(0, sulfur_x - 5), min(WIDTH, sulfur_x + 6))
+                for check_y in range(max(0, sulfur_y - 1), min(HEIGHT, sulfur_y + 2))
+            ):
+                continue
+
+            grid[sulfur_y][sulfur_x] = SULFUR
+            sulfur_placed += 1
+
+        # 13. Generate lava drippers (D) embedded in the ceiling.
+        # Their positions are spread across the route with irregular gaps.
+        ceiling_y = playable_top - 1
+        dripper_x = random.randint(15, 25)
+        while dripper_x < WIDTH - 15:
+            if (
+                grid[ceiling_y][dripper_x] == BLOCK
+                and grid[ceiling_y + 1][dripper_x] == AIR
+            ):
+                grid[ceiling_y][dripper_x] = LAVA_DRIPPER
+
+            dripper_x += random.randint(12, 22)
+
     # ==========================================
     # 12. CREATE ONE SHARED STARTING AREA
     # ==========================================
@@ -356,6 +415,3 @@ def run(place, difficulty=1):
     )
 
     generate_level_file(OUTPUT_PATH, difficulty)
-
-
-run("level2", 40)

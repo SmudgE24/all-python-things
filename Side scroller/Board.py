@@ -148,7 +148,6 @@ class board:
 
 
     def lava_drain(self):
-        self.ticks += 1
         if self.ticks % 80 == 10:
             for y in range(len(self.level)):
                 for x in range(len(self.level[y])):
