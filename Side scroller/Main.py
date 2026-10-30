@@ -18,6 +18,17 @@ import os
 import sys
 import traceback
 import Generator
+import math
+import random
+
+# Nausea effect
+nausea_enabled = False
+nausea_time = 0
+nausea_ticks = 121
+
+NAUSEA_SPEED = 5
+NAUSEA_STRENGTH = 20
+NAUSEA_ROTATION = 5
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -65,6 +76,12 @@ def selected_character(settings):
     return "Knight"
 
 def game_error(error_type, error, traceback_object):
+
+    print(error_type)
+
+    print(error)
+
+    print(traceback_object)
 
     import pygame
     import traceback
@@ -787,11 +804,11 @@ def start():
     pygame.display.set_caption("Steppefall")
     return screen
 
-def draw_inventory(screen, inventory_data, font):
+def draw_inventory(game_surface, inventory_data, font):
     """Draw inventory panel on the left side"""
 
-    pygame.draw.rect(screen, (30, 30, 50), (0, 50, 150, 670))
-    pygame.draw.rect(screen, (100, 100, 150), (0, 50, 150, 670), 2)
+    pygame.draw.rect(game_surface, (30, 30, 50), (0, 50, 150, 670))
+    pygame.draw.rect(game_surface, (100, 100, 150), (0, 50, 150, 670), 2)
 
     section = inventory_data['section']
     items = inventory_data['items']
@@ -824,7 +841,7 @@ def draw_inventory(screen, inventory_data, font):
     # Title
     # -------------------------------------------------
     title = font.render(section.upper(), True, color)
-    screen.blit(title, (10, 60))
+    game_surface.blit(title, (10, 60))
 
     # -------------------------------------------------
     # Items
@@ -836,7 +853,7 @@ def draw_inventory(screen, inventory_data, font):
         # Pointer
         if i == index:
             pygame.draw.rect(
-                screen,
+                game_surface,
                 (255, 255, 0),
                 (5, y_pos - 2, 140, 20)
             )
@@ -854,7 +871,7 @@ def draw_inventory(screen, inventory_data, font):
                 (200, 200, 200)
             )
 
-        screen.blit(text, (10, y_pos))
+        game_surface.blit(text, (10, y_pos))
 
         y_pos += 25
 
@@ -868,7 +885,7 @@ def draw_inventory(screen, inventory_data, font):
             (100, 100, 100)
         )
 
-        screen.blit(text, (10, 90))
+        game_surface.blit(text, (10, 90))
 
 def level_complete(screen, levelNo):
     clock = pygame.time.Clock()
@@ -895,11 +912,16 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None):
+def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False):
     INVENTORY_WIDTH = 150
     GAME_WIDTH = 1280 - INVENTORY_WIDTH
     
-    
+    global nausea_time
+
+    WIDTH, HEIGHT = screen.get_size()
+
+    # Draw everything onto an off-screen surface
+    game_surface = pygame.Surface((WIDTH, HEIGHT))
 
     add = [0, 0]
     contemplating = True
@@ -933,14 +955,14 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
         add[1] = 720 - len(level) * 40
         
     # Draw game area with inventory panel offset
-    screen.fill((0, 0, 0))
+    game_surface.fill((0, 0, 0))
 
     img = pygame.image.load("assets/images/firescene2.jpeg")
     img = pygame.transform.scale(img, (1280, 720))
-    screen.blit(img, (0, 0))
+    game_surface.blit(img, (0, 0))
     
     # Draw game world shifted right by inventory width
-    pygame.draw.rect(screen, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
+    pygame.draw.rect(game_surface, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
     
 
     # Only draw tiles that can appear on screen
@@ -953,10 +975,13 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     for y in range(start_y, end_y):
         for x in range(start_x, end_x):
             if level[y][x] == "B":
-                pygame.draw.rect(screen, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
+            if level[y][x] == "B" and level[y-1][x] == 'M':
+                pygame.draw.rect(game_surface, (235, 199, 21), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
 
             elif level[y][x] == "D":
-                pygame.draw.rect(screen, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
 
             elif str(level[y][x]).startswith("L"):
                 lava_number = int(level[y][x][1:])
@@ -969,37 +994,39 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
                     lava_height
                 )
 
-                pygame.draw.rect(screen, (155, 30, 4), lava_rect)
+                pygame.draw.rect(game_surface, (155, 30, 4), lava_rect)
 
                 inner_rect = lava_rect.inflate(-4, -2)
 
                 if inner_rect.width > 0 and inner_rect.height > 0:
-                    pygame.draw.rect(screen, (255, 92, 8), inner_rect)
+                    pygame.draw.rect(game_surface, (255, 92, 8), inner_rect)
 
                     surface_height = max(1, min(3, inner_rect.height // 2))
 
                     pygame.draw.rect(
-                        screen,
+                        game_surface,
                         (255, 204, 55),
                         (inner_rect.x + 2, inner_rect.y, inner_rect.width - 4, surface_height)
                     )
 
             elif level[y][x] == "C":
-                pygame.draw.rect(screen, (255, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                pygame.draw.rect(game_surface, (255, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
 
             elif level[y][x] == "H":
-                pygame.draw.rect(screen, (150, 75, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                pygame.draw.rect(game_surface, (150, 75, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
 
             elif level[y][x] == "P":
-                pygame.draw.rect(screen, (0, 55, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                pygame.draw.rect(game_surface, (0, 55, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
 
-                        
+    for i in range(len(smokes)):
+        pygame.draw.rect(game_surface, smokes[i].color, (INVENTORY_WIDTH + smokes[i].x + add[0], smokes[i].y + add[1], 40, 40))
+    
     for i in range(len(bullets)):
         if bullets[i] is not None:
-            pygame.draw.rect(screen, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width))
+            pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width)) 
     
     for i in range(len(enemies)):
-        pygame.draw.rect(screen, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
+        pygame.draw.rect(game_surface, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
 
     if boss is not None:
         boss_rect = pygame.Rect(
@@ -1008,22 +1035,22 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
             boss.width,
             boss.hight
         )
-        pygame.draw.rect(screen, (190, 35, 15), boss_rect)
-        pygame.draw.rect(screen, (255, 130, 20), boss_rect.inflate(-12, -12))
+        pygame.draw.rect(game_surface, (190, 35, 15), boss_rect)
+        pygame.draw.rect(game_surface, (255, 130, 20), boss_rect.inflate(-12, -12))
         health_width = round(boss.width * max(0, boss.hp) / boss.max_hp)
         pygame.draw.rect(
-            screen,
+            game_surface,
             (60, 0, 0),
             (boss_rect.x, boss_rect.y - 8, boss.width, 5)
         )
         pygame.draw.rect(
-            screen,
+            game_surface,
             (255, 30, 20),
             (boss_rect.x, boss_rect.y - 8, health_width, 5)
         )
         for attack in boss.attackCurrents:
             pygame.draw.rect(
-                screen,
+                game_surface,
                 (255, 80, 0),
                 (
                     INVENTORY_WIDTH + attack.x + add[0],
@@ -1035,27 +1062,59 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     
     # Draw weapon attacks
     if bullets[0] is not None:
-        pygame.draw.rect(screen, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
+        pygame.draw.rect(game_surface, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
     if bullets[1] is not None:
-        pygame.draw.rect(screen, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
+        pygame.draw.rect(game_surface, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
     
     # Draw UI stats (shifted for inventory panel)
     font = pygame.font.SysFont(None, 30)
     text = font.render(str(hp), True, (255, 0, 0))
     text_rect = text.get_rect(center=(INVENTORY_WIDTH + 1100, 30))
-    screen.blit(text, text_rect)
+    game_surface.blit(text, text_rect)
     text = font.render(str(coins), True, (255, 255, 0))
     text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
-    screen.blit(text, text_rect)
+    game_surface.blit(text, text_rect)
     if dam:
         damage = pygame.Surface((1280, 720), pygame.SRCALPHA)
         damage.fill((255, 0, 0, 100))
-        screen.blit(damage, (0, 0))
+        game_surface.blit(damage, (0, 0))
     
     # Draw inventory panel (fixed, not affected by camera)
     if inventory_data:
-        draw_inventory(screen, inventory_data, pygame.font.SysFont(None, 20))
+        draw_inventory(game_surface, inventory_data, pygame.font.SysFont(None, 20))
     
+    # ==========================================
+    # NAUSEA / WORLD WOBBLE EFFECT
+    # ==========================================
+
+    if nausea_enabled:
+
+        nausea_time += 1 / 40
+
+        # Horizontal and vertical oscillation
+        wobble_x = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
+        wobble_y = math.cos(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
+
+        # Slight rotational wobble
+        angle = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_ROTATION
+
+        # Rotate entire game image
+        rotated = pygame.transform.rotate(game_surface, angle)
+
+        # Centre image and apply movement
+        rotated_rect = rotated.get_rect(
+            center=(
+                WIDTH // 2 + wobble_x,
+                HEIGHT // 2 + wobble_y
+            )
+        )
+
+        screen.fill((0, 0, 0))
+        screen.blit(rotated, rotated_rect)
+
+    else:
+        screen.blit(game_surface, (0, 0))
+
     return screen
 
 def death(screen):
@@ -1221,6 +1280,7 @@ def run():
 
 
             screen = start()  
+            music.play_music("audio (1).mp3")
             level = [24, 24]
             player_class = CHARACTER_CLASSES.get(selected_character(settings), Player.Knight)
             player_1 = player_class(level)
@@ -1283,14 +1343,16 @@ def run():
                     boss = bosses
                 holding_attack = False
                 holding_super_attack = False
-                music.play_music("audio (1).mp3")
+                
+
+                nausea_ticks = 1210000000
 
                 room1 = False
                 room2 = False
 
                 text_show = False
 
-                Generator.run(f"level{str(levelNo + 1)}")
+                Generator.run(f"level{str(levelNo + 1)}", levelNo + 1)
 
                 while running:
 
@@ -1642,6 +1704,25 @@ def run():
                     aBoard.rarity_weights["rare"] += 3*player_1.luck
                     aBoard.rarity_weights["very rare"] += 4*player_1.luck
 
+                    smokes = aBoard.sulpher()
+
+                    to_pop = []
+                    for i in range(len(smokes)):
+                        if smokes[i].isTouchingPlayer(player_1):
+                            nausea_ticks = 0
+                            if random.random() < 0.5:
+                                player_1.hp -= 1
+                            to_pop.append(i)
+
+                    for i in range(len(to_pop)):
+                        smokes.pop(len(to_pop) - 1 - i)
+
+                    nausea_ticks += 1
+                    if nausea_ticks < 200:
+                        nausea_enabled = True
+                    else:
+                        nausea_enabled = False
+
                     simulation_time = time.perf_counter() - simulation_start
 
                     rendering_start = time.perf_counter()
@@ -1652,7 +1733,7 @@ def run():
                         hp=player_1.hp, dam=dam, coins=player_1.coins,
                         enemies=enemies, inventory_data=inventory_data,
                         player_width=player_1.width, player_hight=player_1.hight,
-                        boss=boss if bosses is not None else None
+                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled
                     )
 
                     if text_show:

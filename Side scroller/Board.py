@@ -11,9 +11,13 @@ import Enemies
 import Items
 import random
 import bosses
+import Player
 random.seed() 
 class board:
     def __init__(self, level):
+        self.smoke_list = []
+        self.ticks = 0
+        self.ticks = 0
         self.level = level
         self.airs = []
         self.blocks = []
@@ -103,17 +107,53 @@ class board:
         
         return blocks
 
+    def smoke(self):
+        to_pop = []
+        for i in range(len(self.smoke_list)):
+            self.smoke_list[i].time += 1
+            if self.smoke_list[i].time > 400:
+                to_pop.append(i)
+
+            else:
+                answer = self.smoke_list[i].is_under_wall('B', True)
+                if not answer:
+                    self.smoke_list[i].y -= 1
+                else:
+                    if not self.smoke_list[i].is_touching_wall_left('B', True):
+                        self.smoke_list[i].x -= 1
+                    elif not self.smoke_list[i].is_touching_wall_right('B', True):
+                        self.smoke_list[i].x += 1
+                    else:
+                        to_pop.append(i)
+
+        for i in range(len(to_pop)):
+            self.smoke_list.pop(len(to_pop) - 1 - i)
+
+        return self.smoke_list
+            
+    def sulpher(self):
+        self.ticks += 1
+        if self.ticks % 280 == 30:
+            for y in range(len(self.level)):
+                for x in range(len(self.level[y])):
+                    if self.level[y][x] == "M":
+                        new_smoke_list = movable_entity('smoke', (145, 145, 145), self.level)
+                        new_smoke_list.x = x * 40
+                        new_smoke_list.y = y * 40
+                        self.smoke_list.append(new_smoke_list)
+
+        return self.smoke()
+
+
+
+
     def lava_drain(self):
-        direc = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-        for y in range(len(self.level)):
-            for x in range(len(self.level[y])):
-                if self.level[y][x] == "D":
-                    for i in range(len(direc)):
-                        dx, dy = direc[i]
-                        nx, ny = x + dx, y + dy
-                        if 0 <= ny < len(self.level) and 0 <= nx < len(self.level[ny]):
-                            if str(self.level[ny][nx]).startswith("L"):
-                                self.level[ny][nx] = "."
+        self.ticks += 1
+        if self.ticks % 80 == 10:
+            for y in range(len(self.level)):
+                for x in range(len(self.level[y])):
+                    if self.level[y][x] == "D":
+                        self.level[y + 1][x] = "L1"
         return self.level
 
 
@@ -234,3 +274,30 @@ class board:
                         self.level[y][x] = "L" + str(amount)
 
         return self.level
+
+
+
+class movable_entity(Player.player):
+    def __init__(self, name, color, level):
+        self.time = 0
+        self.name = name
+        self.x = 0
+        self.y = 0
+        self.color = color
+        self.jumpmax = 0
+        self.hp = 1
+        Player.player.__init__(self, level, self.jumpmax, self.hp)
+
+    def isTouchingPlayer(self, player):
+            if (
+                player.x < self.x + 40 and
+                player.x + player.width > self.x and
+                player.y < self.y + 40 and
+                player.y + player.hight > self.y
+            ):
+                if player.vy > 0 and player.last_y + player.hight <= self.y + 5:
+                    return True
+                else:
+                    return True
+            
+            return False

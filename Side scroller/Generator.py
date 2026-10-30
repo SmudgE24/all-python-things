@@ -23,8 +23,11 @@ END = 'E'
 VINE = 'P'
 
 
-def generate_level_file(filename="random_level.txt"):
+def generate_level_file(filename="random_level.txt", difficulty=1):
 
+    difficulty = max(1, min(40, difficulty))
+
+    # The rest of your existing function goes here
     # 1. Start with a solid rock matrix
     grid = [[BLOCK for _ in range(WIDTH)] for _ in range(HEIGHT)]
 
@@ -58,9 +61,15 @@ def generate_level_file(filename="random_level.txt"):
         for x in range(15, WIDTH - 15):
 
             if not in_pool:
-                if random.random() < 0.45:
+                lava_chance = 0.35 + difficulty * 0.008
+
+                if random.random() < lava_chance:
                     in_pool = True
-                    pool_counter = random.randint(4, 9)
+
+                    pool_counter = random.randint(
+                        4 + difficulty // 10,
+                        9 + difficulty // 5
+                    )
 
             if in_pool and pool_counter > 0:
 
@@ -78,9 +87,13 @@ def generate_level_file(filename="random_level.txt"):
         # 5. Generate hanging stalactites
         for x in range(12, WIDTH - 12):
 
-            if random.random() < 0.15:
+            stalactite_chance = 0.12 + difficulty * 0.004
 
-                stalactite_length = random.randint(1, 3)
+            if random.random() < stalactite_chance:
+                stalactite_length = random.randint(
+                    1,
+                    min(5, 2 + difficulty // 10)
+                )
 
                 for l in range(stalactite_length):
 
@@ -163,7 +176,10 @@ def generate_level_file(filename="random_level.txt"):
 
                             # Wider platforms give the player
                             # more room to land
-                            width_span = random.randint(3, 5)
+                            width_span = random.randint(
+                                max(2, 3 - difficulty // 15),
+                                5
+                            )
 
                             platform_placed = False
 
@@ -193,7 +209,10 @@ def generate_level_file(filename="random_level.txt"):
 
                                 # Vary the distance to the
                                 # next platform
-                                next_platform_gap = random.randint(5, 7)
+                                next_platform_gap = random.randint(
+                                    5 + difficulty // 10,
+                                    7 + difficulty // 5
+                                )
 
                                 break
 
@@ -215,20 +234,18 @@ def generate_level_file(filename="random_level.txt"):
 
                         spawn_roll = random.random()
 
-                        respective_probabilities = [0.04, 0.08, 0.02]# Coin, Enemy, Chest
-                        real_probabilities = []
-                        no = 0
-                        for p in respective_probabilities:
-                            no += p
-                            real_probabilities.append(no)
-                        if spawn_roll < real_probabilities[2]: 
-                            grid[y][x] = CHEST
+                        enemy_chance = 0.08 + difficulty * 0.002
+                        coin_chance = 0.04
+                        chest_chance = 0.02
 
-                        if spawn_roll < real_probabilities[1]:
+                        if spawn_roll < enemy_chance:
                             grid[y][x] = ENEMY
-                        
-                        if spawn_roll < real_probabilities[0]:
+
+                        elif spawn_roll < enemy_chance + coin_chance:
                             grid[y][x] = COIN
+
+                        elif spawn_roll < enemy_chance + coin_chance + chest_chance:
+                            grid[y][x] = CHEST
 
         # 9. Create the left entrance runway
         # Each route connects to the shared entrance shaft
@@ -327,12 +344,9 @@ def generate_level_file(filename="random_level.txt"):
 # RUN THE GENERATOR
 # ==========================================
 
-def run(place):
-    SCRIPT_DIR = (
-        os.path.dirname(os.path.abspath(__file__))
-        if os.path.dirname(os.path.abspath(__file__))
-        else "."
-    )
+def run(place, difficulty=1):
+
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
     OUTPUT_PATH = os.path.join(
         SCRIPT_DIR,
@@ -341,4 +355,7 @@ def run(place):
         f"{place}.txt"
     )
 
-    generate_level_file(OUTPUT_PATH)
+    generate_level_file(OUTPUT_PATH, difficulty)
+
+
+run("level2", 40)
