@@ -8,5 +8,11 @@
         "level": "level1",
         "place": [15, 7],
         "text": "The developer was here. They regret nothing."
+    },
+    "fire_boss_warning": {
+        "level": "level40",
+        "place": [84, 11],
+        "text": "You have beaten the first boss, but beware, contestant, there are many miles and countless dangers to go."
+
     }
 }

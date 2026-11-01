@@ -415,3 +415,5 @@ def run(place, difficulty=1):
     )
 
     generate_level_file(OUTPUT_PATH, difficulty)
+
+run('level2', 40)

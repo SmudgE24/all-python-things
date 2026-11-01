@@ -43,7 +43,7 @@ ITEMS_DB = {
     "Flame Thrower": {
         "type": "weapon",
         "damage": 2,
-        "attack_speed": 0.8,
+        "attack_speed": 0.5,
         "rarity": "rare",
         "description": "Burns enemies",
         "effect": "fire"

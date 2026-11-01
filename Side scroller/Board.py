@@ -148,13 +148,95 @@ class board:
 
 
     def lava_drain(self):
-        if self.ticks % 80 == 10:
+        if self.ticks % 600 == 10:
             for y in range(len(self.level)):
                 for x in range(len(self.level[y])):
                     if self.level[y][x] == "D":
                         self.level[y + 1][x] = "L1"
         return self.level
 
+    def water_drain(self):
+        # Spawns a full block of water (W14) from ceiling drippers 'w'
+        if self.ticks % 450 == 10:
+            for y in range(len(self.level)):
+                for x in range(len(self.level[y])):
+                    if self.level[y][x] == "w":
+                        if y + 1 < len(self.level) and self.level[y + 1][x] == ".":
+                            self.level[y + 1][x] = "W14"
+        return self.level
+
+    def water_tick(self):
+        old_level = [row[:] for row in self.level]
+
+        amounts = [
+            [int(str(tile)[1:]) if str(tile).startswith("W") else 0 for tile in row]
+            for row in old_level
+        ]
+
+        moved_down = [[0] * len(row) for row in old_level]
+        received_down = [[0] * len(row) for row in old_level]
+
+        # Gravity processing: bottom to top
+        for y in range(len(old_level) - 1, -1, -1):
+            for x, tile in enumerate(old_level[y]):
+                if not str(tile).startswith("W"):
+                    continue
+                if y + 1 >= len(old_level) or x >= len(old_level[y + 1]):
+                    continue
+
+                below = old_level[y + 1][x]
+                # Solid blocks, lava, or a completely full water block (W14) block path
+                if below in ("B", "C", "H", "W14", "L7"):  
+                    continue
+
+                # Capacity calculation based on a max value of 14
+                capacity = (14 - amounts[y + 1][x] + moved_down[y + 1][x] - received_down[y + 1][x])
+                moved = min(amounts[y][x], max(0, capacity))
+
+                moved_down[y][x] = moved
+                received_down[y + 1][x] += moved
+
+        next_amounts = [
+            [amounts[y][x] - moved_down[y][x] + received_down[y][x] for x in range(len(old_level[y]))]
+            for y in range(len(old_level))
+        ]
+
+        # Horizontal equalization physics
+        for y, row in enumerate(old_level):
+            for x in range(len(row) - 1):
+                left_tile, right_tile = row[x], row[x + 1]
+
+                if left_tile != "." and not str(left_tile).startswith("W"): continue
+                if right_tile != "." and not str(right_tile).startswith("W"): continue
+
+                left_amount, right_amount = next_amounts[y][x], next_amounts[y][x + 1]
+                if abs(left_amount - right_amount) < 2: continue
+
+                if left_amount > right_amount:
+                    source_x, target_x = x, x + 1
+                else:
+                    source_x, target_x = x + 1, x
+
+                if not str(row[source_x]).startswith("W") or moved_down[y][source_x] > 0:
+                    continue
+
+                if y + 1 < len(old_level) and source_x < len(old_level[y + 1]):
+                    if old_level[y + 1][source_x] not in ("B", "C", "H", "W14"):
+                        continue
+
+                # Transfer a liquid step if the target height allows room below 14
+                if next_amounts[y][source_x] > 0 and next_amounts[y][target_x] < 14:
+                    next_amounts[y][source_x] -= 1
+                    next_amounts[y][target_x] += 1
+
+        # Re-map cellular states back onto the map grid
+        for y, row in enumerate(old_level):
+            for x, tile in enumerate(row):
+                amount = next_amounts[y][x]
+                if str(tile).startswith("W") or amount > 0:
+                    self.level[y][x] = "." if amount <= 0 else "W" + str(amount)
+
+        return self.level
 
     def lava_tick(self):
         old_level = [row[:] for row in self.level]

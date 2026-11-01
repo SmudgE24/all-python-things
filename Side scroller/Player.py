@@ -10,6 +10,7 @@ import Items
 
 class player:
     def __init__(self, level, jumpmax, hp):
+        self.underwaterfor = None
         self.timefrozen = False
         self.timefrozenat = None
         self.timefrozen_duration = 15
@@ -41,6 +42,7 @@ class player:
         self.level = level
 
         self.jumpmax = jumpmax
+        self.start_jumpmax = jumpmax
         self.hp = hp
         self.max_hp = 99
 
@@ -116,6 +118,11 @@ class player:
                 self.hp = self.max_hp
 
     def move(self, left, right):
+        try:
+            if self.speed >= 14:
+                self.speed = 13
+        except:
+            pass
         Or = True
         block = "B"
         INVENTORY_WIDTH = 150  # Prevent player from entering inventory area
@@ -167,6 +174,9 @@ class player:
         Or = True
         block = "B"
         self.y += 1
+
+        if self.jumpmax > self.start_jumpmax + 1:
+            self.jumpmax = self.start_jumpmax + 1
         
         on_ground = self.is_on_wall(block, Or)
         self.y -= 1
@@ -208,7 +218,7 @@ class player:
         right = (self.x + self.width - 1) // 40
         bottom = (self.y + self.hight) // 40
 
-        if block != "L":
+        if block != "L" and block != "W":
             if bottom < 0 or bottom >= len(self.level):
                 return False
         
@@ -248,22 +258,41 @@ class player:
         right = (self.x + self.width - 1) // 40
         top = ((self.y - 1) // 40)
     
-        if top < 0 or top >= len(self.level):
-            return False
-    
-        if left < 0 or right >= len(self.level[0]):
-            return False
-    
-        if Or:
-            return (
-                self.level[top][left] == block or
-                self.level[top][right] == block
-            )
-        else:
-            return (
-                self.level[top][left] == block and
-                self.level[top][right] == block
+        if block != "L" and block != "W":
+            if top < 0 or top >= len(self.level):
+                return False
+        
+            if left < 0 or right >= len(self.level[0]):
+                return False
+        
+            if Or:
+                return (
+                    self.level[top][left] == block or
+                    self.level[top][right] == block
                 )
+            else:
+                return (
+                    self.level[top][left] == block and
+                    self.level[top][right] == block
+                )
+        else:
+            if top < 0 or top >= len(self.level):
+                return False
+        
+            if left < 0 or right >= len(self.level[0]):
+                return False
+        
+            if Or:
+                return (
+                    list(self.level[top][left])[0] == block or
+                    list(self.level[top][right])[0] == block
+                )
+            else:
+                return (
+                    list(self.level[top][left])[0] == block and
+                    list(self.level[top][right])[0] == block
+                )
+
     
     
     def is_touching_wall_left(self, block, Or):
@@ -523,9 +552,75 @@ class player:
             self.on_fire = True
             self.on_fire_for = None
 
+    def WaterTick(self, diving=False):
+        if self.is_on_wall(block="W", Or=True):
+            self.jumps = 1
+            self.on_fire = False
+            self.on_fire_for = None
+
+        if not diving:
+            bottom = (self.y + self.hight) // 40
+            left = (self.x + 1) // 40
+            right = (self.x + self.width - 1) // 40
+            water_surfaces = []
+
+            for column in range(left, right + 1):
+                if bottom < 0 or bottom >= len(self.level):
+                    continue
+                if column < 0 or column >= len(self.level[bottom]):
+                    continue
+                if not str(self.level[bottom][column]).startswith("W"):
+                    continue
+
+                water_row = bottom
+                while (
+                    water_row > 0
+                    and column < len(self.level[water_row - 1])
+                    and str(self.level[water_row - 1][column]).startswith("W")
+                ):
+                    water_row -= 1
+
+                water_amount = int(str(self.level[water_row][column])[1:])
+                water_height = max(1, round(water_amount * (40 / 14)))
+                water_surface = water_row * 40 + 40 - water_height
+                if self.y + self.hight > water_surface:
+                    water_surfaces.append(water_surface)
+
+            if water_surfaces:
+                target_surface = min(water_surfaces)
+                surface_y = target_surface - self.hight
+                
+                # Check if the player is currently deeper than the water surface
+                if self.y > surface_y:
+                    # Float upward by 12 pixels per tick.
+                    # max() ensures the player doesn't overshoot the surface.
+                    #self.y = max(surface_y, self.y - 12)
+                    self.vy = -12  # Stop downward gravity momentum
+                # else:
+                #     # Player is falling onto the water surface from above
+                #     if (surface_y - self.y) > 12:
+                #         self.y += 12
+                    # else:
+                    #     self.y = surface_y
+                    #     self.vy = 0
+
+        if self.is_under_wall("W", True):
+            if self.underwaterfor == None:
+                self.underwaterfor = 1
+            else:
+                self.underwaterfor += 1
+        else:
+            self.underwaterfor = None
+
+        if self.underwaterfor is not None:
+            if self.underwaterfor > 200:
+                if self.underwaterfor % 40 == 0:
+                    self.take_damage(1)
+
+
     def trigger_explosion(self, enemies, damage=5):
         """Trigger an explosion effect around the player"""
-        explosion_radius = 80  # 2 blocks in each direction
+        explosion_radius = 160  # 4 blocks in each direction
         
         # Check for enemies within the explosion radius
         for enemy in enemies:
@@ -541,6 +636,8 @@ class player:
 
 class Pirate(player):
     def __init__(self, level):
+        self.last_attacked_at = -100000000000
+        self.ticks = 0
         self.charge_count = 0
         self.super_charged = True
         self.current_attack = None
@@ -563,9 +660,11 @@ class Pirate(player):
     def attack(self):
         print(self.equipped)
         print(self.equipped['weapon'])
-        attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
-        self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
-        self.current_attack.direction = -1 if self.going_left else 1
+        if self.ticks >= self.last_attacked_at + self.attack_interval():
+            self.last_attacked_at = self.ticks
+            attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
+            self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+            self.current_attack.direction = -1 if self.going_left else 1
     
     #def use_ability(self):
     
@@ -612,6 +711,8 @@ class Pirate(player):
 
 class Knight(player):
     def __init__(self, level):
+        self.ticks = 0
+        self.last_attacked_at = -100000000000
         self.charge_count = 0
         self.super_charged = True
         self.current_attack = None
@@ -634,9 +735,11 @@ class Knight(player):
     def attack(self):
         print(self.equipped)
         print(self.equipped['weapon'])
-        attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
-        self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
-        self.current_attack.direction = -1 if self.going_left else 1
+        if self.ticks >= self.last_attacked_at + self.attack_interval():
+            self.last_attacked_at = self.ticks
+            attack_type = Items.ITEMS_DB[self.equipped['weapon']]["effect"]
+            self.current_attack = weapon((0,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+            self.current_attack.direction = -1 if self.going_left else 1
     
     #def use_ability(self):
     
@@ -659,11 +762,15 @@ class Knight(player):
         if self.current_attack is not None:
             self.current_attack.direction = -1 if self.going_left else 1
             if self.current_attack.attack_type == "ranged":
-                self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
+                if self.ticks - self.last_attacked_at == 1:
+                    self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
                 a = self.current_attack.move()
             elif self.current_attack.attack_type == "Stab":
                 attack_x = self.x - self.current_attack.size_width if self.going_left else self.x + self.width
-                a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
+                if not self.going_left:
+                    a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
+                else:
+                    a = self.current_attack.move(attack_x - self.width * 2, self.y + self.hight // 2, self.x, self.y)
             else:
                 a = self.current_attack.move(self.x + self.width, self.y + self.hight // 2, self.x, self.y)
         if self.current_super is not None:

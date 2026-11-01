@@ -800,15 +800,18 @@ def start():
     pygame.font.init()
     icon = pygame.image.load("assets/images/Cover.png")
     pygame.display.set_icon(icon)
-    screen = pygame.display.set_mode((1280, 720))
+    current_screen = pygame.display.get_surface()
+    size = current_screen.get_size() if current_screen else (1280, 720)
+    screen = pygame.display.set_mode(size, pygame.RESIZABLE)
     pygame.display.set_caption("Steppefall")
     return screen
 
 def draw_inventory(game_surface, inventory_data, font):
     """Draw inventory panel on the left side"""
 
-    pygame.draw.rect(game_surface, (30, 30, 50), (0, 50, 150, 670))
-    pygame.draw.rect(game_surface, (100, 100, 150), (0, 50, 150, 670), 2)
+    panel_height = max(0, game_surface.get_height() - 50)
+    pygame.draw.rect(game_surface, (30, 30, 50), (0, 50, 150, panel_height))
+    pygame.draw.rect(game_surface, (100, 100, 150), (0, 50, 150, panel_height), 2)
 
     section = inventory_data['section']
     items = inventory_data['items']
@@ -914,20 +917,24 @@ def level_complete(screen, levelNo):
 
 def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False):
     INVENTORY_WIDTH = 150
-    GAME_WIDTH = 1280 - INVENTORY_WIDTH
     
     global nausea_time
 
     WIDTH, HEIGHT = screen.get_size()
+    GAME_WIDTH = max(1, WIDTH - INVENTORY_WIDTH)
 
     # Draw everything onto an off-screen surface
     game_surface = pygame.Surface((WIDTH, HEIGHT))
 
     add = [0, 0]
+    camera_left = GAME_WIDTH * 0.34
+    camera_right = GAME_WIDTH * 0.66
+    camera_top = HEIGHT * 0.31
+    camera_bottom = HEIGHT * 0.625
     contemplating = True
     while contemplating:
-        if (player_y + add[1]) > 450 or ((player_y + add[1]) < 220 and add[1] < 0):
-            if (player_y + add[1]) > 450:
+        if (player_y + add[1]) > camera_bottom or ((player_y + add[1]) < camera_top and add[1] < 0):
+            if (player_y + add[1]) > camera_bottom:
                 add[1] -= 1
             else:
                 add[1] += 1
@@ -937,8 +944,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
 
     contemplating = True
     while contemplating:
-        if (player_x + add[0]) > 750 or ((player_x + add[0]) < 380 and player_x < 380):
-            if (player_x + add[0]) > 750:
+        if (player_x + add[0]) > camera_right or ((player_x + add[0]) < camera_left and player_x < camera_left):
+            if (player_x + add[0]) > camera_right:
                 add[0] -= 1
             else:
                 add[0] += 1
@@ -951,23 +958,19 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
 
     if add[1] > 0:
         add[1] = 0
-    elif len(level) * 40 + add[1] < 720:
-        add[1] = 720 - len(level) * 40
+    elif len(level) * 40 + add[1] < HEIGHT:
+        add[1] = HEIGHT - len(level) * 40
         
     # Draw game area with inventory panel offset
     game_surface.fill((0, 0, 0))
 
     img = pygame.image.load("assets/images/firescene2.jpeg")
-    img = pygame.transform.scale(img, (1280, 720))
+    img = pygame.transform.scale(img, (WIDTH, HEIGHT))
     game_surface.blit(img, (0, 0))
-    
-    # Draw game world shifted right by inventory width
-    pygame.draw.rect(game_surface, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
-    
 
     # Only draw tiles that can appear on screen
     start_y = max(0, int(-add[1] // 40))
-    end_y = min(len(level), int((720 - add[1] + 39) // 40))
+    end_y = min(len(level), int((HEIGHT - add[1] + 39) // 40))
 
     start_x = max(0, int(-add[0] // 40))
     end_x = min(len(level[0]), int((GAME_WIDTH - add[0] + 39) // 40))
@@ -1017,6 +1020,31 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
 
             elif level[y][x] == "P":
                 pygame.draw.rect(game_surface, (0, 55, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+
+            elif str(level[y][x]).startswith("W"):
+                water_number = int(level[y][x][1:])
+                # Map 14 steps cleanly onto the 40-pixel block height limit
+                water_height = max(1, round(water_number * (40 / 14)))
+
+                water_rect = pygame.Rect(
+                    INVENTORY_WIDTH + x * 40 + add[0],
+                    y * 40 + add[1] + 40 - water_height,
+                    40,
+                    water_height
+                )
+                
+                # Render fluid core
+                pygame.draw.rect(game_surface, (20, 110, 220), water_rect)
+                
+                # Render foam highlight surface line
+                inner_rect = water_rect.inflate(-4, -2)
+                if inner_rect.width > 0 and inner_rect.height > 0:
+                    pygame.draw.rect(
+                        game_surface, 
+                        (100, 180, 255), 
+                        (inner_rect.x, inner_rect.y, inner_rect.width, max(1, min(3, inner_rect.height // 2)))
+                    )
+
 
     for i in range(len(smokes)):
         pygame.draw.rect(game_surface, smokes[i].color, (INVENTORY_WIDTH + smokes[i].x + add[0], smokes[i].y + add[1], 40, 40))
@@ -1069,15 +1097,17 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     # Draw UI stats (shifted for inventory panel)
     font = pygame.font.SysFont(None, 30)
     text = font.render(str(hp), True, (255, 0, 0))
-    text_rect = text.get_rect(center=(INVENTORY_WIDTH + 1100, 30))
+    text_rect = text.get_rect(center=(WIDTH - 30, 30))
     game_surface.blit(text, text_rect)
     text = font.render(str(coins), True, (255, 255, 0))
     text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
     game_surface.blit(text, text_rect)
     if dam:
-        damage = pygame.Surface((1280, 720), pygame.SRCALPHA)
+        damage = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         damage.fill((255, 0, 0, 100))
         game_surface.blit(damage, (0, 0))
+
+    pygame.draw.rect(game_surface, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
     
     # Draw inventory panel (fixed, not affected by camera)
     if inventory_data:
@@ -1153,21 +1183,25 @@ def settings_menu(screen, settings):
     clock = pygame.time.Clock()
     font = pygame.font.SysFont(None, 30)
     title_font = pygame.font.SysFont(None, 60)
-    back_button = pygame.Rect(500, 640, 280, 60)
+    width, height = screen.get_size()
+    back_button = pygame.Rect((width - 280) // 2, height - 80, 280, 60)
     checkbox_buttons = []
     scroll = 0
     running = True
 
     while running:
+        width, height = screen.get_size()
+        back_button.centerx = width // 2
+        back_button.top = height - 80
         screen.fill((30, 30, 30))
         title = title_font.render("SETTINGS", True, (255, 255, 255))
-        screen.blit(title, title.get_rect(center=(640, 100)))
+        screen.blit(title, title.get_rect(center=(width // 2, 100)))
 
         checkbox_buttons = []
         for index, setting in enumerate(settings["settings"]):
             y_pos = 150 + (index * 50) - scroll
-            if 125 <= y_pos <= 590:
-                checkbox = pygame.Rect(400, y_pos, 35, 35)
+            if 125 <= y_pos <= height - 130:
+                checkbox = pygame.Rect(width // 2 - 240, y_pos, 35, 35)
                 checkbox_buttons.append((checkbox, index))
                 #(70, 100, 160)
                 pygame.draw.rect(screen, (0, 0, 0), checkbox, border_radius=5)
@@ -1175,7 +1209,7 @@ def settings_menu(screen, settings):
                     pygame.draw.rect(screen, (0, 255, 0), checkbox.inflate(-10, -10))
 
                 question = font.render(setting["question"], True, (255, 255, 255))
-                screen.blit(question, (455, y_pos + 4))
+                screen.blit(question, (checkbox.right + 20, y_pos + 4))
 
         pygame.draw.rect(screen, (80, 80, 80), back_button, border_radius=10)
         back_text = font.render("Back", True, (255, 255, 255))
@@ -1191,7 +1225,7 @@ def settings_menu(screen, settings):
                 elif event.key == pygame.K_UP:
                     scroll = max(0, scroll - 50)
                 elif event.key == pygame.K_DOWN:
-                    max_scroll = max(0, len(settings["settings"]) * 50 - 465)
+                    max_scroll = max(0, len(settings["settings"]) * 50 - (height - 255))
                     scroll = min(max_scroll, scroll + 50)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1 and back_button.collidepoint(event.pos):
@@ -1203,7 +1237,7 @@ def settings_menu(screen, settings):
                 elif event.button == 4:
                     scroll = max(0, scroll - 50)
                 elif event.button == 5:
-                    max_scroll = max(0, len(settings["settings"]) * 50 - 465)
+                    max_scroll = max(0, len(settings["settings"]) * 50 - (height - 255))
                     scroll = min(max_scroll, scroll + 50)
 
         pygame.display.flip()
@@ -1223,6 +1257,7 @@ def run():
         menu = True
 
         while menu:
+            width, height = screen.get_size()
 
             screen.fill((30, 30, 30))
 
@@ -1230,8 +1265,8 @@ def run():
             # BUTTONS
             # =========================
 
-            play_button = pygame.Rect(500, 300, 280, 70)
-            settings_button = pygame.Rect(500, 400, 280, 70)
+            play_button = pygame.Rect((width - 280) // 2, height // 2 - 60, 280, 70)
+            settings_button = pygame.Rect((width - 280) // 2, height // 2 + 40, 280, 70)
 
             pygame.draw.rect(screen, (60, 120, 70), play_button, border_radius=10)
             pygame.draw.rect(screen, (70, 100, 160), settings_button, border_radius=10)
@@ -1315,6 +1350,11 @@ def run():
                     for j in range(len(level[i])):
                         if level[i][j] == "L":
                             level[i][j] = "L7"
+
+                for i in range(len(level)):
+                    for j in range(len(level[i])):
+                        if level[i][j] == "W":
+                            level[i][j] = "W14"
 
                 print(level)
                 
@@ -1638,6 +1678,18 @@ def run():
                         for i in range(len(enemies)):
                             enemies[i].level = level
 
+
+                    WATER_SPEED = 10 # Water flows faster than lava!
+                    if ticks % WATER_SPEED == 0:
+                        level = aBoard.water_tick()
+                        player_1.level = level
+
+                    level = aBoard.water_drain()
+                    player_1.WaterTick(
+                        diving=keys[pygame.K_DOWN] or keys[pygame.K_s]
+                    )
+
+
                     level = aBoard.lava_drain()
 
                     if bosses is not None:
@@ -1723,6 +1775,8 @@ def run():
                     else:
                         nausea_enabled = False
 
+                    player_1.ticks += 1
+
                     simulation_time = time.perf_counter() - simulation_start
 
                     rendering_start = time.perf_counter()
@@ -1771,6 +1825,8 @@ def run():
                         f"Simulation: {simulation_time * 1000:.2f} ms | "
                         f"Rendering: {rendering_time * 1000:.2f} ms"
                     )
+
+                    print(player_1.x / 40, '             ', player_1.y / 40)
 
                     pygame.display.flip()
                     clock.tick(40)
