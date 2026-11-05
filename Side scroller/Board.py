@@ -186,7 +186,7 @@ class board:
 
                 below = old_level[y + 1][x]
                 # Solid blocks, lava, or a completely full water block (W14) block path
-                if below in ("B", "C", "H", "W14", "L7"):  
+                if below in ("B", "C", "H", "W14", "L7", "K"):  
                     continue
 
                 # Capacity calculation based on a max value of 14
@@ -263,7 +263,7 @@ class board:
 
                 below = old_level[y + 1][x]
 
-                if below in ("B", "C", "H", "L7"):
+                if below in ("B", "C", "H", "L7", "K"):
                     continue
 
                 # Account for space created by lava moving down from this cell
@@ -330,7 +330,7 @@ class board:
                     if source_x < len(old_level[y + 1]):
                         below = old_level[y + 1][source_x]
 
-                        if below not in ("B", "C", "H", "L7"):
+                        if below not in ("B", "C", "H", "L7", "K"):
                             continue
 
                 # Transfer exactly one unit, preserving the L7 maximum

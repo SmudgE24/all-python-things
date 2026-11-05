@@ -20,6 +20,59 @@ import traceback
 import Generator
 import math
 import random
+import lava_sprites
+
+class ImageManager:
+    def __init__(self):
+        """
+        Loads all PNG and JPEG images from 'assets/images' upfront.
+        Optimises them for performance based on transparency.
+        """
+        self.images = {}
+        
+        # Target the 'assets/images' directory relative to this script
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        folder_path = os.path.join(base_dir, "assets", "images")
+        
+        # Fail-safe check
+        if not os.path.exists(folder_path):
+            raise FileNotFoundError(
+                f"Could not find asset directory at: {folder_path}\n"
+                f"Ensure your folder structure is: your_code.py -> assets/images/"
+            )
+
+        # Loop through all files in 'assets/images'
+        for filename in os.listdir(folder_path):
+            lower_name = filename.lower()
+            
+            # Filter for images
+            if lower_name.endswith(('.png', '.jpg', '.jpeg')):
+                file_path = os.path.join(folder_path, filename)
+                
+                # Get the name without extension (e.g., 'knight_idle.png' -> 'knight_idle')
+                image_key = os.path.splitext(filename)[0]
+                
+                try:
+                    surface = pygame.image.load(file_path)
+                    
+                    # Custom conversion for alpha/non-alpha files
+                    if lower_name.endswith('.png'):
+                        self.images[image_key] = surface.convert_alpha()
+                    else:
+                        self.images[image_key] = surface.convert()
+                        
+                except pygame.error as e:
+                    print(e)
+
+    def load(self, name):
+        """
+        Retrieves a loaded surface by its filename (minus the extension) for blitting.
+        """
+        if name in self.images:
+            return self.images[name]
+        
+        print(f"Warning: Image asset '{name}' not found.")
+        return None
 
 # Nausea effect
 nausea_enabled = False
@@ -804,6 +857,7 @@ def start():
     size = current_screen.get_size() if current_screen else (1280, 720)
     screen = pygame.display.set_mode(size, pygame.RESIZABLE)
     pygame.display.set_caption("Steppefall")
+    lava_sprites.load()
     return screen
 
 def draw_inventory(game_surface, inventory_data, font):
@@ -915,7 +969,7 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False):
+def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None):
     INVENTORY_WIDTH = 150
     
     global nausea_time
@@ -964,9 +1018,10 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     # Draw game area with inventory panel offset
     game_surface.fill((0, 0, 0))
 
-    img = pygame.image.load("assets/images/firescene2.jpeg")
-    img = pygame.transform.scale(img, (WIDTH, HEIGHT))
+    # Fixed scaling line
+    img = pygame.transform.scale(image_manager.load("background"), (WIDTH, HEIGHT))
     game_surface.blit(img, (0, 0))
+
 
     # Only draw tiles that can appear on screen
     start_y = max(0, int(-add[1] // 40))
@@ -979,47 +1034,47 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
         for x in range(start_x, end_x):
             if level[y][x] == "B":
                 pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                img = pygame.transform.scale(image_manager.load("block1"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
-            if level[y][x] == "B" and level[y-1][x] == 'M':
-                pygame.draw.rect(game_surface, (235, 199, 21), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+            if level[y][x] == "M":
+                img = pygame.transform.scale(image_manager.load("sulfur deposit"), (70, 70))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0] - 20, y * 40 + add[1]+ 10))
 
             elif level[y][x] == "D":
                 pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                img = pygame.transform.scale(image_manager.load("block1"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
             elif str(level[y][x]).startswith("L"):
-                lava_number = int(level[y][x][1:])
-                lava_height = max(1, round(lava_number * (40 / 7)))
-
-                lava_rect = pygame.Rect(
+                above = y > 0 and str(level[y-1][x]).startswith("L")
+                lava_sprites.draw_lava(
+                    game_surface,
                     INVENTORY_WIDTH + x * 40 + add[0],
-                    y * 40 + add[1] + 40 - lava_height,
-                    40,
-                    lava_height
+                    y * 40 + add[1],
+                    int(level[y][x][1:]),
+                    above,
+                    ticks,
                 )
 
-                pygame.draw.rect(game_surface, (155, 30, 4), lava_rect)
-
-                inner_rect = lava_rect.inflate(-4, -2)
-
-                if inner_rect.width > 0 and inner_rect.height > 0:
-                    pygame.draw.rect(game_surface, (255, 92, 8), inner_rect)
-
-                    surface_height = max(1, min(3, inner_rect.height // 2))
-
-                    pygame.draw.rect(
-                        game_surface,
-                        (255, 204, 55),
-                        (inner_rect.x + 2, inner_rect.y, inner_rect.width - 4, surface_height)
-                    )
-
             elif level[y][x] == "C":
-                pygame.draw.rect(game_surface, (255, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                img = pygame.transform.scale(image_manager.load("coin"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
             elif level[y][x] == "H":
-                pygame.draw.rect(game_surface, (150, 75, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                img = pygame.transform.scale(image_manager.load("chest"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
+
+            elif level[y][x] == "K":
+                img = pygame.transform.scale(image_manager.load("open chest"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
             elif level[y][x] == "P":
-                pygame.draw.rect(game_surface, (0, 55, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
+                if level[y+1][x] == "P":
+                    img = pygame.transform.scale(image_manager.load("vine"), (40, 40))
+                else:
+                    img = pygame.transform.scale(image_manager.load("vine end"), (40, 40))
+                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
             elif str(level[y][x]).startswith("W"):
                 water_number = int(level[y][x][1:])
@@ -1054,7 +1109,10 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
             pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width)) 
     
     for i in range(len(enemies)):
-        pygame.draw.rect(game_surface, (0, 255, 255), (INVENTORY_WIDTH + enemies[i].x+add[0], enemies[i].y+add[1], 40, 40))
+        img = pygame.transform.scale(image_manager.load("enemy"), (60, 60))
+        if enemies[i].going_left:
+            img = pygame.transform.flip(img, True, False)
+        game_surface.blit(img, (INVENTORY_WIDTH + enemies[i].x+add[0] - 7, enemies[i].y+add[1] - 15))
 
     if boss is not None:
         boss_rect = pygame.Rect(
@@ -1251,6 +1309,7 @@ def run():
                 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))   
     screen = start()
+    image_manager = ImageManager()
     font = pygame.font.SysFont(None, 30)
     settings = load_settings()
     while True:
@@ -1647,7 +1706,7 @@ def run():
                     for i in range(len(a)):
                         try:
                             if level[a[i][1]][a[i][0]] == "H":
-                                aBoard.setPoint(a[i][0], a[i][1], tile=".")
+                                aBoard.setPoint(a[i][0], a[i][1], tile="K")
                                 contents = aBoard.find_chest_contents()
                                 if contents[0] == "10 Coins":
                                     coins_gained = player_1.gain_coins(10)
@@ -1787,7 +1846,7 @@ def run():
                         hp=player_1.hp, dam=dam, coins=player_1.coins,
                         enemies=enemies, inventory_data=inventory_data,
                         player_width=player_1.width, player_hight=player_1.hight,
-                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled
+                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled, ticks=ticks, image_manager=image_manager
                     )
 
                     if text_show:
