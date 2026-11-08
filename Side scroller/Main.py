@@ -29,6 +29,10 @@ class ImageManager:
         Optimises them for performance based on transparency.
         """
         self.images = {}
+        self.scaled_images = {}
+        self.cropped_images = {}
+        self.fonts = {}
+        self.surfaces = {}
         
         # Target the 'assets/images' directory relative to this script
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +78,50 @@ class ImageManager:
         print(f"Warning: Image asset '{name}' not found.")
         return None
 
+    def scaled(self, name, size, flip_x=False, flip_y=False):
+        """Return a scaled image, creating it only the first time it is needed."""
+        size = (max(1, int(size[0])), max(1, int(size[1])))
+        key = (name, size, flip_x, flip_y)
+
+        if key not in self.scaled_images:
+            image = self.load(name)
+            if image is None:
+                return None
+            image = pygame.transform.scale(image, size)
+            if flip_x or flip_y:
+                image = pygame.transform.flip(image, flip_x, flip_y)
+            self.scaled_images[key] = image
+
+        return self.scaled_images[key]
+
+    def cropped_scaled(self, name, crop_rect, size):
+        """Cache cropped and scaled atlas frames, such as the block quadrants."""
+        size = (max(1, int(size[0])), max(1, int(size[1])))
+        crop_rect = tuple(crop_rect)
+        key = (name, crop_rect, size)
+
+        if key not in self.cropped_images:
+            image = self.load(name)
+            if image is None:
+                return None
+            cropped = image.subsurface(crop_rect).copy()
+            self.cropped_images[key] = pygame.transform.scale(cropped, size)
+
+        return self.cropped_images[key]
+
+    def font(self, size):
+        """Reuse the default pygame font instead of constructing it every frame."""
+        if size not in self.fonts:
+            self.fonts[size] = pygame.font.SysFont(None, size)
+        return self.fonts[size]
+
+    def surface(self, name, size, flags=0):
+        """Reuse fixed-size off-screen surfaces between frames."""
+        key = (name, tuple(size), flags)
+        if key not in self.surfaces:
+            self.surfaces[key] = pygame.Surface(size, flags)
+        return self.surfaces[key]
+
 # Nausea effect
 nausea_enabled = False
 nausea_time = 0
@@ -82,6 +130,25 @@ nausea_ticks = 121
 NAUSEA_SPEED = 5
 NAUSEA_STRENGTH = 20
 NAUSEA_ROTATION = 5
+
+# Knight animation (frames come from the sliced sprite sheet: "knight walk 0", "knight sword 3", ...)
+walk_time = 0
+attack_time = 0
+hurt_time = 99
+last_hp = None
+facing_left = False
+
+WALK_TICKS = 5      # game ticks per walk frame
+ATTACK_TICKS = 5    # game ticks per attack frame
+HURT_TICKS = 10      # game ticks per hurt frame
+
+# Which sheet frames play for each weapon (the others in the sheet are effect-only frames)
+ATTACK_FRAMES = {
+    "sword": [1, 2, 3, 4, 5, 6],
+    "bow": [1, 2, 3, 4, 6],
+    "flame": [1, 6, 1, 6],
+    "fire-flame": [2, 3, 2, 3],
+}
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -969,16 +1036,16 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None):
+def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None):
     INVENTORY_WIDTH = 150
     
-    global nausea_time
+    global nausea_time, walk_time, attack_time, hurt_time, last_hp, facing_left
 
     WIDTH, HEIGHT = screen.get_size()
     GAME_WIDTH = max(1, WIDTH - INVENTORY_WIDTH)
 
-    # Draw everything onto an off-screen surface
-    game_surface = pygame.Surface((WIDTH, HEIGHT))
+    # Reuse the off-screen surface instead of allocating a new one every frame.
+    game_surface = image_manager.surface("game", (WIDTH, HEIGHT))
 
     add = [0, 0]
     camera_left = GAME_WIDTH * 0.34
@@ -987,8 +1054,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     camera_bottom = HEIGHT * 0.625
     contemplating = True
     while contemplating:
-        if (player_y + add[1]) > camera_bottom or ((player_y + add[1]) < camera_top and add[1] < 0):
-            if (player_y + add[1]) > camera_bottom:
+        if (Player.y + add[1]) > camera_bottom or ((Player.y + add[1]) < camera_top and add[1] < 0):
+            if (Player.y + add[1]) > camera_bottom:
                 add[1] -= 1
             else:
                 add[1] += 1
@@ -998,8 +1065,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
 
     contemplating = True
     while contemplating:
-        if (player_x + add[0]) > camera_right or ((player_x + add[0]) < camera_left and player_x < camera_left):
-            if (player_x + add[0]) > camera_right:
+        if (Player.x + add[0]) > camera_right or ((Player.x + add[0]) < camera_left and Player.x < camera_left):
+            if (Player.x + add[0]) > camera_right:
                 add[0] -= 1
             else:
                 add[0] += 1
@@ -1018,101 +1085,274 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     # Draw game area with inventory panel offset
     game_surface.fill((0, 0, 0))
 
-    # Fixed scaling line
-    img = pygame.transform.scale(image_manager.load("background"), (WIDTH, HEIGHT))
+    # Background is scaled once and reused.
+    img = image_manager.scaled("background", (WIDTH, HEIGHT))
     game_surface.blit(img, (0, 0))
 
 
     # Only draw tiles that can appear on screen
-    start_y = max(0, int(-add[1] // 40))
-    end_y = min(len(level), int((HEIGHT - add[1] + 39) // 40))
 
-    start_x = max(0, int(-add[0] // 40))
-    end_x = min(len(level[0]), int((GAME_WIDTH - add[0] + 39) // 40))
+    # Only draw tiles that can appear on screen
+    # Force camera additions into integers to prevent floating-point sub-pixel jitter
+    cam_x = int(add[0])
+    cam_y = int(add[1])
+
+    # Use pure floor/ceiling adjustments with a guaranteed 2-tile buffer (pad left/right/top/bottom)
+    start_y = max(0, (-cam_y) // 40 - 3)
+    end_y = min(len(level), (HEIGHT - cam_y) // 40 + 3)
+
+    start_x = max(0, (-cam_x) // 40 - 3)
+    end_x = min(len(level[0]), (GAME_WIDTH - cam_x) // 40 + 3)
+
+    # Draw background details
+    background_tile = image_manager.scaled("back ground", (160, 160))
 
     for y in range(start_y, end_y):
         for x in range(start_x, end_x):
-            if level[y][x] == "B":
-                pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
-                img = pygame.transform.scale(image_manager.load("block1"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
-
-            if level[y][x] == "M":
-                img = pygame.transform.scale(image_manager.load("sulfur deposit"), (70, 70))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0] - 20, y * 40 + add[1]+ 10))
-
-            elif level[y][x] == "D":
-                pygame.draw.rect(game_surface, (0, 255, 0), (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1], 40, 40))
-                img = pygame.transform.scale(image_manager.load("block1"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
-
-            elif str(level[y][x]).startswith("L"):
-                above = y > 0 and str(level[y-1][x]).startswith("L")
-                lava_sprites.draw_lava(
-                    game_surface,
-                    INVENTORY_WIDTH + x * 40 + add[0],
-                    y * 40 + add[1],
-                    int(level[y][x][1:]),
-                    above,
-                    ticks,
+            if x % 4 == 0 and y % 4 == 0:
+                game_surface.blit(
+                    background_tile,
+                    (INVENTORY_WIDTH + x * 40 + cam_x,
+                     y * 40 + cam_y)
                 )
 
-            elif level[y][x] == "C":
-                img = pygame.transform.scale(image_manager.load("coin"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
 
-            elif level[y][x] == "H":
-                img = pygame.transform.scale(image_manager.load("chest"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
+    # Keep track of cells already drawn as part of large sprites
+    visited_cells = set()
 
-            elif level[y][x] == "K":
-                img = pygame.transform.scale(image_manager.load("open chest"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
+    # Cache block image
+    base_img = image_manager.load("block4")
+    half_w, half_h = base_img.get_width() // 2, base_img.get_height() // 2
 
-            elif level[y][x] == "P":
-                if level[y+1][x] == "P":
-                    img = pygame.transform.scale(image_manager.load("vine"), (40, 40))
+    # Draw map tiles
+    for y in range(start_y, end_y):
+        for x in range(start_x, end_x):
+
+            if (x, y) in visited_cells:
+                continue
+
+            tile = level[y][x]
+
+            pos_x = INVENTORY_WIDTH + x * 40 + add[0]
+            pos_y = y * 40 + add[1]
+
+            # --------------------------------
+            # BLOCKS
+            # --------------------------------
+
+            if tile == "B" or tile == "b":
+
+                # Check whether a complete 4x4 block exists
+                has_all = True
+
+                if tile == "B":
+                    for check_y in range(4):
+                        for check_x in range(4):
+
+                            if (
+                                y + check_y >= len(level)
+                                or x + check_x >= len(level[y + check_y])
+                                or level[y + check_y][x + check_x] != "b"
+                            ):
+                                has_all = False
+
+                # Draw a complete 4x4 block
+                if tile == "B" and has_all:
+
+                    img = image_manager.scaled("block4", (160, 160))
+                    game_surface.blit(img, (pos_x, pos_y))
+
+                    for check_y in range(4):
+                        for check_x in range(4):
+                            visited_cells.add((x + check_x, y + check_y))
+
                 else:
-                    img = pygame.transform.scale(image_manager.load("vine end"), (40, 40))
-                game_surface.blit(img, (INVENTORY_WIDTH + x * 40 + add[0], y * 40 + add[1]))
+                    # Draw a single block using the correct quadrant
+                    crop_x = (x % 4) * (base_img.get_width() // 4)
+                    crop_y = (y % 4) * (base_img.get_height() // 4)
 
-            elif str(level[y][x]).startswith("W"):
-                water_number = int(level[y][x][1:])
-                # Map 14 steps cleanly onto the 40-pixel block height limit
+                    img = image_manager.cropped_scaled(
+                        "block4",
+                        (
+                            crop_x,
+                            crop_y,
+                            base_img.get_width() // 4,
+                            base_img.get_height() // 4
+                        ),
+                        (40, 40)
+                    )
+                    game_surface.blit(img, (pos_x, pos_y))
+
+                    visited_cells.add((x, y))
+            # --------------------------------
+            # SULFUR
+            # --------------------------------
+
+            elif tile == "M":
+
+                img = image_manager.scaled("sulfur deposit", (70, 70))
+
+                game_surface.blit(
+                    img,
+                    (pos_x - 20, pos_y + 10)
+                )
+
+            # --------------------------------
+            # LAVA DRIPPER
+            # --------------------------------
+
+            elif tile == "D":
+
+                img = image_manager.scaled("drip block", (80, 40))
+
+                game_surface.blit(img, (pos_x, pos_y))
+
+            # --------------------------------
+            # LAVA
+            # --------------------------------
+
+            elif str(tile).startswith("L"):
+
+                above = (
+                    y > 0
+                    and str(level[y - 1][x]).startswith("L")
+                )
+
+                lava_sprites.draw_lava(
+                    game_surface,
+                    pos_x,
+                    pos_y,
+                    int(str(tile)[1:]),
+                    above,
+                    ticks
+                )
+
+            # --------------------------------
+            # COINS
+            # --------------------------------
+
+            elif tile == "C":
+
+                img = image_manager.scaled("coin", (40, 40))
+
+                game_surface.blit(img, (pos_x, pos_y))
+
+            # --------------------------------
+            # CHESTS
+            # --------------------------------
+
+            elif tile == "H":
+
+                img = image_manager.scaled("chest", (40, 40))
+
+                game_surface.blit(img, (pos_x, pos_y))
+
+            elif tile == "K":
+
+                img = image_manager.scaled("open chest", (40, 40))
+
+                game_surface.blit(img, (pos_x, pos_y))
+
+            # --------------------------------
+            # VINES
+            # --------------------------------
+
+            elif tile == "P":
+
+                if y + 1 < len(level) and level[y + 1][x] == "P":
+
+                    img = image_manager.scaled("vine", (40, 40))
+
+                else:
+
+                    img = image_manager.scaled("vine end", (40, 40))
+
+                game_surface.blit(img, (pos_x, pos_y))
+
+            # --------------------------------
+            # WATER
+            # --------------------------------
+
+            elif str(tile).startswith("W"):
+
+                water_number = int(str(tile)[1:])
                 water_height = max(1, round(water_number * (40 / 14)))
 
                 water_rect = pygame.Rect(
-                    INVENTORY_WIDTH + x * 40 + add[0],
-                    y * 40 + add[1] + 40 - water_height,
+                    pos_x,
+                    pos_y + 40 - water_height,
                     40,
                     water_height
                 )
-                
-                # Render fluid core
-                pygame.draw.rect(game_surface, (20, 110, 220), water_rect)
-                
-                # Render foam highlight surface line
+
+                pygame.draw.rect(
+                    game_surface,
+                    (20, 110, 220),
+                    water_rect
+                )
+
                 inner_rect = water_rect.inflate(-4, -2)
+
                 if inner_rect.width > 0 and inner_rect.height > 0:
+
                     pygame.draw.rect(
-                        game_surface, 
-                        (100, 180, 255), 
-                        (inner_rect.x, inner_rect.y, inner_rect.width, max(1, min(3, inner_rect.height // 2)))
+                        game_surface,
+                        (100, 180, 255),
+                        (
+                            inner_rect.x,
+                            inner_rect.y,
+                            inner_rect.width,
+                            max(1, min(3, inner_rect.height // 2))
+                        )
                     )
 
-
     for i in range(len(smokes)):
-        pygame.draw.rect(game_surface, smokes[i].color, (INVENTORY_WIDTH + smokes[i].x + add[0], smokes[i].y + add[1], 40, 40))
+        smoke_rect = pygame.Rect(
+            INVENTORY_WIDTH + smokes[i].x + cam_x,
+            smokes[i].y + cam_y,
+            40,
+            40
+        )
+        if smoke_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
+            pygame.draw.rect(game_surface, smokes[i].color, smoke_rect)
     
     for i in range(len(bullets)):
         if bullets[i] is not None:
-            pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width)) 
+            bullet_screen_rect = pygame.Rect(
+                INVENTORY_WIDTH + bullets[i].x + cam_x,
+                bullets[i].y + cam_y - (50 if bullets[i].attack_type == "fire" else 0),
+                bullets[i].size_width + 30,
+                bullets[i].size_hight + (50 if bullets[i].attack_type == "fire" else 0)
+            )
+            if not bullet_screen_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
+                continue
+            if bullets[i].attack_type == "fire":
+                img = image_manager.scaled(
+                    "knite fire-flame 2",
+                    (bullets[i].size_width, bullets[i].size_hight + 50),
+                    flip_x=bullets[i].direction < 0
+                )
+                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
+            elif bullets[i].attack_type == "ranged":
+                img = image_manager.scaled("arrow", (bullets[i].size_width, bullets[i].size_hight))
+                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
+
+            if bullets[i].super == True:
+                print("supering")
+                img = image_manager.scaled("cannonball", (bullets[i].size_width, bullets[i].size_hight + 35))
+                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
+            #pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_hight)) 
     
     for i in range(len(enemies)):
-        img = pygame.transform.scale(image_manager.load("enemy"), (60, 60))
-        if enemies[i].going_left:
-            img = pygame.transform.flip(img, True, False)
-        game_surface.blit(img, (INVENTORY_WIDTH + enemies[i].x+add[0] - 7, enemies[i].y+add[1] - 15))
+        enemy_rect = pygame.Rect(
+            INVENTORY_WIDTH + enemies[i].x + cam_x - 7,
+            enemies[i].y + cam_y - 15,
+            60,
+            60
+        )
+        if enemy_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
+            img = image_manager.scaled("enemy", (60, 60), flip_x=enemies[i].going_left)
+            game_surface.blit(img, enemy_rect.topleft)
 
     if boss is not None:
         boss_rect = pygame.Rect(
@@ -1146,14 +1386,8 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
                 )
             )
     
-    # Draw weapon attacks
-    if bullets[0] is not None:
-        pygame.draw.rect(game_surface, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
-    if bullets[1] is not None:
-        pygame.draw.rect(game_surface, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
-    
     # Draw UI stats (shifted for inventory panel)
-    font = pygame.font.SysFont(None, 30)
+    font = image_manager.font(30)
     text = font.render(str(hp), True, (255, 0, 0))
     text_rect = text.get_rect(center=(WIDTH - 30, 30))
     game_surface.blit(text, text_rect)
@@ -1161,15 +1395,72 @@ def drawAll(screen, level, player_x, player_y, bullets, hp, dam, coins, enemies,
     text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
     game_surface.blit(text, text_rect)
     if dam:
-        damage = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        damage = image_manager.surface("damage", (WIDTH, HEIGHT), pygame.SRCALPHA)
         damage.fill((255, 0, 0, 100))
         game_surface.blit(damage, (0, 0))
 
-    pygame.draw.rect(game_surface, (0, 0, 255), (INVENTORY_WIDTH + player_x + add[0], player_y + add[1], player_width, player_hight))
+    # ==========================================
+    # CHOOSE PLAYER ATTACK OR IDLE SPRITE
+    # ==========================================
+    if Player.equipped['weapon'] in ['Sword +3', 'Sword +1', 'Dagger +1']:
+        weapon_set = "sword"
+    elif Player.equipped['weapon'] in ['Bow +3', 'Bow']:
+        weapon_set = "bow"
+    elif Player.equipped['weapon'] == 'Flame Thrower':
+        weapon_set = "flame"
+    else:
+        weapon_set = "sword"
+
+    # Moving left/right (last_x is set at the start of every tick in run())
+    moved = Player.x - getattr(Player, "last_x", Player.x)
+    if moved < 0:
+        facing_left = True
+    elif moved > 0:
+        facing_left = False
+
+    # Animation timers
+    if last_hp is not None and hp < last_hp:
+        hurt_time = 0
+    last_hp = hp
+    walk_time = walk_time + 1 if moved != 0 else 0
+    frames = ATTACK_FRAMES[weapon_set]
+    if attack_time > 0:
+        attack_time += 1
+    if attack_time == 0 and bullets[0] is not None:
+        attack_time = 1
+    if attack_time > len(frames) * ATTACK_TICKS:
+        attack_time = 1 if bullets[0] is not None else 0   # keep looping while the attack is still active
+
+    # Priority: hurt > attacking > walking > standing with weapon
+    if hurt_time < 6 * HURT_TICKS:
+        image_name = f"knight hurt {hurt_time // HURT_TICKS}"
+        hurt_time += 1
+    elif attack_time > 0:
+        image_name = f"knight {weapon_set} {frames[(attack_time - 1) // ATTACK_TICKS]}"
+    elif moved != 0:
+        image_name = f"knight walk {(walk_time // WALK_TICKS) % 6}"
+    else:
+        image_name = f"knight {weapon_set} 0"
+
+    # The sheet frames are square and face right, so scale evenly and flip when walking left
+    size = Player.hight# + 88
+    img = image_manager.scaled(
+        image_name,
+        (size + 40, size + 40),
+        flip_x=facing_left
+    )
+
+    # ─── CRITICAL CORRECTION ──────────────────────────────────────────
+    # Explicitly calculate where the player belongs relative to the camera
+    # ──────────────────────────────────────────────────────────────────
+    player_screen_x = INVENTORY_WIDTH + Player.x + add[0] - (size - Player.width) // 2 - 20
+    player_screen_y = Player.y + add[1] - (size - Player.hight) - 40
+    
+    game_surface.blit(img, (player_screen_x, player_screen_y))
     
     # Draw inventory panel (fixed, not affected by camera)
     if inventory_data:
-        draw_inventory(game_surface, inventory_data, pygame.font.SysFont(None, 20))
+        draw_inventory(game_surface, inventory_data, image_manager.font(20))
     
     # ==========================================
     # NAUSEA / WORLD WOBBLE EFFECT
@@ -1841,7 +2132,7 @@ def run():
                     rendering_start = time.perf_counter()
                     
                     screen = drawAll(
-                        screen, level, player_x=player_1.x, player_y=player_1.y,
+                        screen, level, player_1,
                         bullets=[player_1.current_attack, player_1.current_super],
                         hp=player_1.hp, dam=dam, coins=player_1.coins,
                         enemies=enemies, inventory_data=inventory_data,

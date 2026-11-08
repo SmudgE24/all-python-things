@@ -12,6 +12,8 @@ class fire_boss(Player.player):
         self.speed = 3
         self.max_hp = self.hp
         self.attackCurrents = []
+        self.fire_storm = False
+        self.fire_storm_timer = 0
         self.attack_timer = 0
         self.contact_cooldown = 0
 
@@ -24,6 +26,14 @@ class fire_boss(Player.player):
                 10, 10, self.level, "ranged"
             )
         )
+
+    def fire_storm_attack(self, player_x, player_y):
+        self.fire_storm_timer += 1
+        if pow(abs(self.y - player_y), 2) + pow(abs(self.x - player_x), 2) < 120 and not self.fire_storm and self.fire_storm_timer >= 0:
+            self.fire_storm = 0
+            self.fire_storm_timer = -400
+        elif not pow(abs(self.y - player_y), 2) + pow(abs(self.x - player_x), 2) < 120:
+            self.fire_storm = False
 
     def updateAttack(self):
         for attack in self.attackCurrents[:]:

@@ -6,7 +6,7 @@
     },
     "secret_message": {
         "level": "level1",
-        "place": [15, 7],
+        "place": [15, 17],
         "text": "The developer was here. They regret nothing."
     },
     "fire_boss_warning": {

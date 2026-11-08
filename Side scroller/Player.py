@@ -37,7 +37,7 @@ class player:
         self.x = 0
         self.y = 0
         self.width = 40
-        self.hight = 38
+        self.hight = 40
 
         self.level = level
 
@@ -651,6 +651,7 @@ class Pirate(player):
         
         # Start with a basic sword using item system
         self.inventory['weapon'].append("Sword +1")
+        self.inventory['weapon'].append("Flame Thrower")
         self.equipped['weapon'] = "Sword +1"
         self.base_speed = 7
         self.speed = 7
@@ -677,6 +678,7 @@ class Pirate(player):
                 self.current_super = weapon((-10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
             else:
                 self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
+        self.current_super.super = True
     
     def update_attacks(self, holding_attack, holding_super_attack, extraa):
         if not holding_attack:
@@ -749,9 +751,10 @@ class Knight(player):
         if self.super_charged:
             self.super_charged = False
             if self.going_left:
-                self.current_super = weapon((-10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=1, size_hight=40, level=self.level, attack_type=attack_type)
+                self.current_super = weapon((-10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=40, level=self.level, attack_type=attack_type)
             else:
-                self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=1, size_hight=40, level=self.level, attack_type=attack_type)
+                self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=40, level=self.level, attack_type=attack_type)
+        self.current_super.super = True
     
     def update_attacks(self, holding_attack, holding_super_attack, extraa):
         if not holding_attack:
@@ -772,9 +775,11 @@ class Knight(player):
                 else:
                     a = self.current_attack.move(attack_x - self.width * 2, self.y + self.hight // 2, self.x, self.y)
             else:
-                a = self.current_attack.move(self.x + self.width, self.y + self.hight // 2, self.x, self.y)
+                attack_x = self.x + self.width
+                a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
         if self.current_super is not None:
-            self.current_super.move(self.x+40, self.y+20, self.x, self.y)
+            attack_x = self.x - self.current_super.size_width if self.going_left else self.x + self.width
+            self.current_super.move(attack_x, self.y+20, self.x, self.y)
 
         if a or extraa:
             self.current_attack = None
@@ -799,6 +804,7 @@ class weapon:
         self.positions = None
         self.expired = False
         self.direction = 1
+        self.super = False
     
     def move(self, moveto_x=None, moveto_y=None, player_x=None, player_y=None):
         if self.attack_type == "Stab":
@@ -818,6 +824,8 @@ class weapon:
                 int((player_x + 20) // 40),
                 int((player_y + 20) // 40)
             )
+            self.x = player_x + 20 if self.direction > 0 else player_x - 60
+            self.y = player_y + 20
 
             fire_pos = [
                 [self.direction, 0],
