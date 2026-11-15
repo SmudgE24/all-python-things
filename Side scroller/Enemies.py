@@ -79,11 +79,26 @@ class NPC(Enemy):
         self.dialogue = dialogue_lines # A list of strings: ["Hello Genghis.", "Beware the caves..."]
         self.hp = 999 # Immortal peaceful NPC
         self.speed = 0
+        self.isinvicinity = False
+        self.text_current = None
+        self.wasinvicinity = False
     def is_near_player(self, player):
+        if self.isinvicinity:
+            self.wasinvicinity = True
+        else:
+            self.wasinvicinity = False
         # Checks if player is within 60 pixels (~1.5 tiles) horizontally and vertically
+        if abs(player.x - self.x) < 60 and abs(player.y - self.y) < 60:
+            self.isinvicinity = True
+        else:
+            self.isinvicinity = False
         return abs(player.x - self.x) < 60 and abs(player.y - self.y) < 60
     def move(self, ticks, Player):
         pass # NPCs stay completely stationary
+    def text(self):
+        if self.isinvicinity and not self.wasinvicinity:
+            self.text_current = f"{self.name}:  {random.choice(self.dialogue)}"
+        return self.text_current
 
 class wolf(Enemy):
     def __init__(self, level):
@@ -96,21 +111,36 @@ class bat(Enemy):
         Enemy.__init__(self, level)
         self.hp = 1
         self.jumpmax = 1
+    
     def move(self, ticks, Player):
         vector = [0, 0]
+        speed = 1 
+
+        # 1. Determine direction (Corrected for standard 2D coordinates)
         if Player.y < self.y:
-            vector[1] += 5
+            vector[1] -= speed  # Move UP
         elif Player.y > self.y:
-            vector[1] -= 5
+            vector[1] += speed  # Move DOWN
+
         if Player.x < self.x:
-            vector[0] += 5
+            vector[0] -= speed  # Move LEFT
+            self.going_left
         elif Player.x > self.x:
-            vector[0] -= 5
-        if not self.is_under_wall('B', True) and vector[1] < 0:
+            vector[0] += speed  # Move RIGHT
+            self.going_left = False
+
+        
+        if vector[1] < 0 and not self.is_under_wall('B', True):
             self.y += vector[1]
-        elif not self.is_on_wall('B', True) and vector[1] > 0:
+        elif vector[1] > 0 and not self.is_on_wall('B', True):
             self.y += vector[1]
-        if not self.is_touching_wall_right('B', True) and vector[0] > 0:
+
+        
+        if vector[0] > 0 and not self.is_touching_wall_right('B', True):
             self.x += vector[0]
-        elif not self.is_touching_wall_left('B', True) and vector[0] < 0:
-            self.y += vector[0]
+        elif vector[0] < 0 and not self.is_touching_wall_left('B', True):
+            self.x += vector[0]  # Fixed: changed self.y to self.x
+
+    def update_vy(self):
+        
+        self.vy = 0

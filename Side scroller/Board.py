@@ -73,14 +73,19 @@ class board:
         self.level[y][x] = tile
     
     def spawn(self):
+        a = Enemies.Enemy(level=self.level)
         spawns = []
         for y in range(len(self.level)):
             for x in range(len(self.level[y])):
                 if self.level[y][x] == "N":
-                    a = Enemies.Enemy(level=self.level)
-                    a.x = x *40
-                    a.y = y * 40
-                    spawns.append(a)
+                    a_type = random.choices(list(a.probs.keys()), weights=list(a.probs.values()))[0]
+                    if a_type == 'bat':
+                        new = Enemies.bat(level=self.level)
+                    elif a_type == 'wolf':
+                        new = Enemies.wolf(level=self.level)
+                    new.x = x *40
+                    new.y = y * 40
+                    spawns.append(new)
         return spawns
 
     def BossSpawn(self):

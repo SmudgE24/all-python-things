@@ -551,6 +551,7 @@ class player:
         if self.is_on_wall(block="L", Or=True):
             self.on_fire = True
             self.on_fire_for = None
+            self.jumps = 0
 
     def WaterTick(self, diving=False):
         if self.is_on_wall(block="W", Or=True):

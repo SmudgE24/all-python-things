@@ -21,6 +21,8 @@ import Generator
 import math
 import random
 import lava_sprites
+import speech_bubble
+import Enemies as Enemies_py
 
 class ImageManager:
     def __init__(self):
@@ -29,10 +31,6 @@ class ImageManager:
         Optimises them for performance based on transparency.
         """
         self.images = {}
-        self.scaled_images = {}
-        self.cropped_images = {}
-        self.fonts = {}
-        self.surfaces = {}
         
         # Target the 'assets/images' directory relative to this script
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -78,50 +76,6 @@ class ImageManager:
         print(f"Warning: Image asset '{name}' not found.")
         return None
 
-    def scaled(self, name, size, flip_x=False, flip_y=False):
-        """Return a scaled image, creating it only the first time it is needed."""
-        size = (max(1, int(size[0])), max(1, int(size[1])))
-        key = (name, size, flip_x, flip_y)
-
-        if key not in self.scaled_images:
-            image = self.load(name)
-            if image is None:
-                return None
-            image = pygame.transform.scale(image, size)
-            if flip_x or flip_y:
-                image = pygame.transform.flip(image, flip_x, flip_y)
-            self.scaled_images[key] = image
-
-        return self.scaled_images[key]
-
-    def cropped_scaled(self, name, crop_rect, size):
-        """Cache cropped and scaled atlas frames, such as the block quadrants."""
-        size = (max(1, int(size[0])), max(1, int(size[1])))
-        crop_rect = tuple(crop_rect)
-        key = (name, crop_rect, size)
-
-        if key not in self.cropped_images:
-            image = self.load(name)
-            if image is None:
-                return None
-            cropped = image.subsurface(crop_rect).copy()
-            self.cropped_images[key] = pygame.transform.scale(cropped, size)
-
-        return self.cropped_images[key]
-
-    def font(self, size):
-        """Reuse the default pygame font instead of constructing it every frame."""
-        if size not in self.fonts:
-            self.fonts[size] = pygame.font.SysFont(None, size)
-        return self.fonts[size]
-
-    def surface(self, name, size, flags=0):
-        """Reuse fixed-size off-screen surfaces between frames."""
-        key = (name, tuple(size), flags)
-        if key not in self.surfaces:
-            self.surfaces[key] = pygame.Surface(size, flags)
-        return self.surfaces[key]
-
 # Nausea effect
 nausea_enabled = False
 nausea_time = 0
@@ -138,16 +92,17 @@ hurt_time = 99
 last_hp = None
 facing_left = False
 
-WALK_TICKS = 5      # game ticks per walk frame
+WIZARD_HEIGHT = 70   # how tall the wizard sprite is on screen (the bubble sits this far above his feet)
+
+WALK_TICKS = 8      # game ticks per walk frame
 ATTACK_TICKS = 5    # game ticks per attack frame
-HURT_TICKS = 10      # game ticks per hurt frame
+HURT_TICKS = 7      # game ticks per hurt frame
 
 # Which sheet frames play for each weapon (the others in the sheet are effect-only frames)
 ATTACK_FRAMES = {
     "sword": [1, 2, 3, 4, 5, 6],
     "bow": [1, 2, 3, 4, 6],
     "flame": [1, 6, 1, 6],
-    "fire-flame": [2, 3, 2, 3],
 }
 
 SETTINGS_PATH = os.path.join(
@@ -1036,7 +991,7 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None):
+def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None, speech=None, npcs=[]):
     INVENTORY_WIDTH = 150
     
     global nausea_time, walk_time, attack_time, hurt_time, last_hp, facing_left
@@ -1044,8 +999,8 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     WIDTH, HEIGHT = screen.get_size()
     GAME_WIDTH = max(1, WIDTH - INVENTORY_WIDTH)
 
-    # Reuse the off-screen surface instead of allocating a new one every frame.
-    game_surface = image_manager.surface("game", (WIDTH, HEIGHT))
+    # Draw everything onto an off-screen surface
+    game_surface = pygame.Surface((WIDTH, HEIGHT))
 
     add = [0, 0]
     camera_left = GAME_WIDTH * 0.34
@@ -1085,8 +1040,8 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     # Draw game area with inventory panel offset
     game_surface.fill((0, 0, 0))
 
-    # Background is scaled once and reused.
-    img = image_manager.scaled("background", (WIDTH, HEIGHT))
+    # Fixed scaling line
+    img = pygame.transform.scale(image_manager.load("background"), (WIDTH, HEIGHT))
     game_surface.blit(img, (0, 0))
 
 
@@ -1105,7 +1060,9 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     end_x = min(len(level[0]), (GAME_WIDTH - cam_x) // 40 + 3)
 
     # Draw background details
-    background_tile = image_manager.scaled("back ground", (160, 160))
+    background_tile = pygame.transform.scale(
+        image_manager.load("back ground"), (160, 160)
+    )
 
     for y in range(start_y, end_y):
         for x in range(start_x, end_x):
@@ -1159,7 +1116,7 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
                 # Draw a complete 4x4 block
                 if tile == "B" and has_all:
 
-                    img = image_manager.scaled("block4", (160, 160))
+                    img = pygame.transform.scale(base_img, (160, 160))
                     game_surface.blit(img, (pos_x, pos_y))
 
                     for check_y in range(4):
@@ -1171,16 +1128,16 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
                     crop_x = (x % 4) * (base_img.get_width() // 4)
                     crop_y = (y % 4) * (base_img.get_height() // 4)
 
-                    img = image_manager.cropped_scaled(
-                        "block4",
+                    cropped = base_img.subsurface(
                         (
                             crop_x,
                             crop_y,
                             base_img.get_width() // 4,
                             base_img.get_height() // 4
-                        ),
-                        (40, 40)
+                        )
                     )
+
+                    img = pygame.transform.scale(cropped, (40, 40))
                     game_surface.blit(img, (pos_x, pos_y))
 
                     visited_cells.add((x, y))
@@ -1190,7 +1147,9 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
 
             elif tile == "M":
 
-                img = image_manager.scaled("sulfur deposit", (70, 70))
+                img = pygame.transform.scale(
+                    image_manager.load("sulfur deposit"), (70, 70)
+                )
 
                 game_surface.blit(
                     img,
@@ -1203,7 +1162,9 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
 
             elif tile == "D":
 
-                img = image_manager.scaled("drip block", (80, 40))
+                img = pygame.transform.scale(
+                    image_manager.load("drip block"), (80, 40)
+                )
 
                 game_surface.blit(img, (pos_x, pos_y))
 
@@ -1233,7 +1194,9 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
 
             elif tile == "C":
 
-                img = image_manager.scaled("coin", (40, 40))
+                img = pygame.transform.scale(
+                    image_manager.load("coin"), (40, 40)
+                )
 
                 game_surface.blit(img, (pos_x, pos_y))
 
@@ -1243,13 +1206,17 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
 
             elif tile == "H":
 
-                img = image_manager.scaled("chest", (40, 40))
+                img = pygame.transform.scale(
+                    image_manager.load("chest"), (40, 40)
+                )
 
                 game_surface.blit(img, (pos_x, pos_y))
 
             elif tile == "K":
 
-                img = image_manager.scaled("open chest", (40, 40))
+                img = pygame.transform.scale(
+                    image_manager.load("open chest"), (40, 40)
+                )
 
                 game_surface.blit(img, (pos_x, pos_y))
 
@@ -1261,11 +1228,15 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
 
                 if y + 1 < len(level) and level[y + 1][x] == "P":
 
-                    img = image_manager.scaled("vine", (40, 40))
+                    img = pygame.transform.scale(
+                        image_manager.load("vine"), (40, 40)
+                    )
 
                 else:
 
-                    img = image_manager.scaled("vine end", (40, 40))
+                    img = pygame.transform.scale(
+                        image_manager.load("vine end"), (40, 40)
+                    )
 
                 game_surface.blit(img, (pos_x, pos_y))
 
@@ -1307,52 +1278,17 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
                     )
 
     for i in range(len(smokes)):
-        smoke_rect = pygame.Rect(
-            INVENTORY_WIDTH + smokes[i].x + cam_x,
-            smokes[i].y + cam_y,
-            40,
-            40
-        )
-        if smoke_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
-            pygame.draw.rect(game_surface, smokes[i].color, smoke_rect)
+        pygame.draw.rect(game_surface, smokes[i].color, (INVENTORY_WIDTH + smokes[i].x + add[0], smokes[i].y + add[1], 40, 40))
     
     for i in range(len(bullets)):
         if bullets[i] is not None:
-            bullet_screen_rect = pygame.Rect(
-                INVENTORY_WIDTH + bullets[i].x + cam_x,
-                bullets[i].y + cam_y - (50 if bullets[i].attack_type == "fire" else 0),
-                bullets[i].size_width + 30,
-                bullets[i].size_hight + (50 if bullets[i].attack_type == "fire" else 0)
-            )
-            if not bullet_screen_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
-                continue
-            if bullets[i].attack_type == "fire":
-                img = image_manager.scaled(
-                    "knite fire-flame 2",
-                    (bullets[i].size_width, bullets[i].size_hight + 50),
-                    flip_x=bullets[i].direction < 0
-                )
-                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
-            elif bullets[i].attack_type == "ranged":
-                img = image_manager.scaled("arrow", (bullets[i].size_width, bullets[i].size_hight))
-                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
+            pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width)) 
 
-            if bullets[i].super == True:
-                print("supering")
-                img = image_manager.scaled("cannonball", (bullets[i].size_width, bullets[i].size_hight + 35))
-                game_surface.blit(img, (INVENTORY_WIDTH + bullets[i].x + add[0] + 30, bullets[i].y + add[1] - 50))
-            #pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_hight)) 
-    
     for i in range(len(enemies)):
-        enemy_rect = pygame.Rect(
-            INVENTORY_WIDTH + enemies[i].x + cam_x - 7,
-            enemies[i].y + cam_y - 15,
-            60,
-            60
-        )
-        if enemy_rect.colliderect((INVENTORY_WIDTH, 0, GAME_WIDTH, HEIGHT)):
-            img = image_manager.scaled("enemy", (60, 60), flip_x=enemies[i].going_left)
-            game_surface.blit(img, enemy_rect.topleft)
+        img = pygame.transform.scale(image_manager.load("enemy"), (60, 60))
+        if enemies[i].going_left:
+            img = pygame.transform.flip(img, True, False)
+        game_surface.blit(img, (INVENTORY_WIDTH + enemies[i].x+add[0] - 7, enemies[i].y+add[1] - 15))
 
     if boss is not None:
         boss_rect = pygame.Rect(
@@ -1386,8 +1322,14 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
                 )
             )
     
+    # Draw weapon attacks
+    if bullets[0] is not None:
+        pygame.draw.rect(game_surface, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
+    if bullets[1] is not None:
+        pygame.draw.rect(game_surface, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
+    
     # Draw UI stats (shifted for inventory panel)
-    font = image_manager.font(30)
+    font = pygame.font.SysFont(None, 30)
     text = font.render(str(hp), True, (255, 0, 0))
     text_rect = text.get_rect(center=(WIDTH - 30, 30))
     game_surface.blit(text, text_rect)
@@ -1395,7 +1337,7 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
     game_surface.blit(text, text_rect)
     if dam:
-        damage = image_manager.surface("damage", (WIDTH, HEIGHT), pygame.SRCALPHA)
+        damage = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         damage.fill((255, 0, 0, 100))
         game_surface.blit(damage, (0, 0))
 
@@ -1443,24 +1385,38 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
         image_name = f"knight {weapon_set} 0"
 
     # The sheet frames are square and face right, so scale evenly and flip when walking left
-    size = Player.hight# + 88
-    img = image_manager.scaled(
-        image_name,
-        (size + 40, size + 40),
-        flip_x=facing_left
-    )
+    size = Player.hight + 44  
+    img = pygame.transform.scale(image_manager.load(image_name), (size, size))
+    if facing_left:
+        img = pygame.transform.flip(img, True, False)
 
     # ─── CRITICAL CORRECTION ──────────────────────────────────────────
     # Explicitly calculate where the player belongs relative to the camera
     # ──────────────────────────────────────────────────────────────────
-    player_screen_x = INVENTORY_WIDTH + Player.x + add[0] - (size - Player.width) // 2 - 20
-    player_screen_y = Player.y + add[1] - (size - Player.hight) - 40
+    player_screen_x = INVENTORY_WIDTH + Player.x + add[0] - (size - Player.width) // 2
+    player_screen_y = Player.y + add[1] - (size - Player.hight)
     
     game_surface.blit(img, (player_screen_x, player_screen_y))
+
+    # NPC speech bubbles, drawn above the wizard's head
+    if speech:
+        bubble_font = pygame.font.SysFont(None, 24)
+        for npc_x, npc_y, npc_text in speech:
+            speech_bubble.draw_speech_bubble(
+                game_surface, image_manager, bubble_font, npc_text,
+                INVENTORY_WIDTH + npc_x + 20 + add[0],
+                npc_y + 40 - WIZARD_HEIGHT + add[1]
+            )
+
+    for npc in npcs:
+        npc_screen_x = INVENTORY_WIDTH + npc.x + add[0] - 40
+        npc_screen_y = npc.y + add[1] -40
+        img = pygame.transform.scale(image_manager.load("wizard"), (npc.width + 88, npc.hight + 50))
+        game_surface.blit(img, (npc_screen_x, npc_screen_y))
     
     # Draw inventory panel (fixed, not affected by camera)
     if inventory_data:
-        draw_inventory(game_surface, inventory_data, image_manager.font(20))
+        draw_inventory(game_surface, inventory_data, pygame.font.SysFont(None, 20))
     
     # ==========================================
     # NAUSEA / WORLD WOBBLE EFFECT
@@ -1726,6 +1682,15 @@ def run():
                 player_1.x = a[0]
                 player_1.y = a[1]
                 enemies = aBoard.spawn()
+                speech = []
+                npcs = []
+                for y in range(len(level)):
+                    for x in range(len(level[y])):
+                        if level[y][x] == 'n':
+                            npc = Enemies_py.NPC(level, 'Wizard', ['Hello contestant', 'Give me 3 gold keys and i will bestow a gift apon you', 'Khan is nearing, hurry', "I love mummy", "I live in this cave", "I am a wizard", "You can find me here later", "I can help you"])
+                            npc.x = x * 40
+                            npc.y = y * 40
+                            npcs.append(npc)
                 bosses = aBoard.BossSpawn()
                 extraa = False
                 boss = None
@@ -1774,6 +1739,9 @@ def run():
                             if event.key == pygame.K_v:
                                 player_1.switch_inventory_section()
                             if event.key == pygame.K_e:
+                                for npc in npcs:
+                                    if npc.is_near_player(player_1):
+                                        npc.next_line()
                                 pos = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
                                 found_sign = False
 
@@ -1896,7 +1864,7 @@ def run():
                             enemy = enemies[i]
                         
                             enemy.update_vy()
-                            enemy.move(ticks)
+                            enemy.move(ticks, Player=player_1)
                         
                             # Check weapon hits
                             hit_by_weapon = False
@@ -2129,6 +2097,8 @@ def run():
 
                     simulation_time = time.perf_counter() - simulation_start
 
+                    speech = [(npc.x, npc.y, npc.text()) for npc in npcs if npc.is_near_player(player_1)]
+
                     rendering_start = time.perf_counter()
                     
                     screen = drawAll(
@@ -2137,7 +2107,7 @@ def run():
                         hp=player_1.hp, dam=dam, coins=player_1.coins,
                         enemies=enemies, inventory_data=inventory_data,
                         player_width=player_1.width, player_hight=player_1.hight,
-                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled, ticks=ticks, image_manager=image_manager
+                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled, ticks=ticks, image_manager=image_manager, speech=speech, npcs=npcs
                     )
 
                     if text_show:
