@@ -99,6 +99,8 @@ class NPC(Enemy):
         if self.isinvicinity and not self.wasinvicinity:
             self.text_current = f"{self.name}:  {random.choice(self.dialogue)}"
         return self.text_current
+    def next_line(self):
+        self.text_current = f"{self.name}:  {random.choice(self.dialogue)}"
 
 class wolf(Enemy):
     def __init__(self, level):

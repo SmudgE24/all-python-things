@@ -1687,7 +1687,7 @@ def run():
                 for y in range(len(level)):
                     for x in range(len(level[y])):
                         if level[y][x] == 'n':
-                            npc = Enemies_py.NPC(level, 'Wizard', ['Hello contestant', 'Give me 3 gold keys and i will bestow a gift apon you', 'Khan is nearing, hurry', "I love mummy", "I live in this cave", "I am a wizard", "You can find me here later", "I can help you"])
+                            npc = Enemies_py.NPC(level, 'Wizard', ['Hello contestant', 'Give me 3 gold keys and i will bestow a gift apon you', 'Khan is nearing, hurry', "I live in this cave", "I am a wizard", "You can find me here later", "I can help you"])
                             npc.x = x * 40
                             npc.y = y * 40
                             npcs.append(npc)
