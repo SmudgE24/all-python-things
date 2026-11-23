@@ -32,6 +32,14 @@ ITEMS_DB = {
         "description": "Stab",
         "effect": "Stab"
     },
+    "Alchemist's Satchel": {
+        "type": "weapon",
+        "damage": 1,
+        "attack_speed": 0.3,
+        "rarity": "common",
+        "description": "Throws bombs that explode on impact",
+        "effect": "bombs"
+    },
     "Bow": {
         "type": "weapon",
         "damage": 2,

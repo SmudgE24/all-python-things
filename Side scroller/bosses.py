@@ -5,7 +5,7 @@ class fire_boss(Player.player):
     def __init__(self, level):
         self.being_damaged = False
         self.jumpmax = 5
-        self.hp = 3670
+        self.hp = 150
         self.name = "Fire Boss"
         super().__init__(level, self.jumpmax, self.hp)
         self.hight = 80

@@ -31,7 +31,7 @@ LAVA_DRIPPER = 'D'
 # ==========================================
 # SETTINGS - CHANGE THESE TO CUSTOMISE LEVELS
 # ==========================================
-ZONE_SIZE = 40            # levels per zone; the last level of a zone is the boss level
+ZONE_SIZE = 20            # levels per zone; the last level of a zone is the boss level
 HEIGHT_PER_ROUTE = 25     # height of one cave route (keep at 25, the layout relies on it)
 ROUTES_MIN = 5            # number of stacked routes, chosen randomly per level
 ROUTES_MAX = 7
@@ -365,9 +365,9 @@ def run(place, difficulty=1, force=False):
     match = re.search(r"(\d+)$", str(place))
     level_number = int(match.group(1)) if match else int(difficulty)
 
-    if level_number % ZONE_SIZE == 0 and os.path.exists(output_path) and not force:
-        print(f"{place} is a boss level and already exists, leaving it alone.")
-        return None
+    # if level_number % ZONE_SIZE == 0 and os.path.exists(output_path) and not force:
+    #     print(f"{place} is a boss level and already exists, leaving it alone.")
+    #     return None
     return generate_level_file(output_path, level_number)
 
 

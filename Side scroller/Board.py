@@ -72,8 +72,15 @@ class board:
     def setPoint(self, x, y, tile):
         self.level[y][x] = tile
     
-    def spawn(self):
+    def spawn(self, levelNo=None):
         a = Enemies.Enemy(level=self.level)
+        if levelNo is not None and levelNo > 6:
+            if levelNo < 26:
+                a.probs["spider"] = 0.1 + (0.005 * levelNo)
+                a.probs["wolf"] = 0.5 - (0.005 * levelNo)
+            else:
+                a.probs["spider"] = 0.3
+                a.probs["wolf"] = 0.3
         spawns = []
         for y in range(len(self.level)):
             for x in range(len(self.level[y])):
@@ -83,6 +90,9 @@ class board:
                         new = Enemies.bat(level=self.level)
                     elif a_type == 'wolf':
                         new = Enemies.wolf(level=self.level)
+                    elif a_type == 'spider':
+                        new = Enemies.spider(level=self.level)
+                    new.probs = a.probs.copy()
                     new.x = x *40
                     new.y = y * 40
                     spawns.append(new)
@@ -170,11 +180,14 @@ class board:
                             self.level[y + 1][x] = "W14"
         return self.level
 
+
     def water_tick(self):
         old_level = [row[:] for row in self.level]
 
+        height = len(old_level)
+
         amounts = [
-            [int(str(tile)[1:]) if str(tile).startswith("W") else 0 for tile in row]
+            [int(tile[1:]) if tile.startswith("W") else 0 for tile in row]
             for row in old_level
         ]
 
@@ -182,72 +195,94 @@ class board:
         received_down = [[0] * len(row) for row in old_level]
 
         # Gravity processing: bottom to top
-        for y in range(len(old_level) - 1, -1, -1):
-            for x, tile in enumerate(old_level[y]):
-                if not str(tile).startswith("W"):
+        for y in range(height - 1, -1, -1):
+            row = old_level[y]
+
+            for x, tile in enumerate(row):
+                if not tile.startswith("W"):
                     continue
-                if y + 1 >= len(old_level) or x >= len(old_level[y + 1]):
+
+                if y + 1 >= height or x >= len(old_level[y + 1]):
                     continue
 
                 below = old_level[y + 1][x]
-                # Solid blocks, lava, or a completely full water block (W14) block path
-                if below in ("B", "C", "H", "W14", "L7", "K"):  
+
+                if below in ("B", "C", "H", "W14", "L7", "K"):
                     continue
 
-                # Capacity calculation based on a max value of 14
-                capacity = (14 - amounts[y + 1][x] + moved_down[y + 1][x] - received_down[y + 1][x])
+                capacity = (
+                    14
+                    - amounts[y + 1][x]
+                    + moved_down[y + 1][x]
+                    - received_down[y + 1][x]
+                )
+
                 moved = min(amounts[y][x], max(0, capacity))
 
                 moved_down[y][x] = moved
                 received_down[y + 1][x] += moved
 
-        next_amounts = [
-            [amounts[y][x] - moved_down[y][x] + received_down[y][x] for x in range(len(old_level[y]))]
-            for y in range(len(old_level))
-        ]
+        # Apply gravity directly to amounts
+        for y, row in enumerate(amounts):
+            for x in range(len(row)):
+                row[x] = row[x] - moved_down[y][x] + received_down[y][x]
 
-        # Horizontal equalization physics
+        # Horizontal equalisation
         for y, row in enumerate(old_level):
+            amount_row = amounts[y]
+            moved_row = moved_down[y]
+
             for x in range(len(row) - 1):
-                left_tile, right_tile = row[x], row[x + 1]
+                left_tile = row[x]
+                right_tile = row[x + 1]
 
-                if left_tile != "." and not str(left_tile).startswith("W"): continue
-                if right_tile != "." and not str(right_tile).startswith("W"): continue
+                if left_tile != "." and not left_tile.startswith("W"):
+                    continue
 
-                left_amount, right_amount = next_amounts[y][x], next_amounts[y][x + 1]
-                if abs(left_amount - right_amount) < 2: continue
+                if right_tile != "." and not right_tile.startswith("W"):
+                    continue
+
+                left_amount = amount_row[x]
+                right_amount = amount_row[x + 1]
+
+                if abs(left_amount - right_amount) < 2:
+                    continue
 
                 if left_amount > right_amount:
                     source_x, target_x = x, x + 1
                 else:
                     source_x, target_x = x + 1, x
 
-                if not str(row[source_x]).startswith("W") or moved_down[y][source_x] > 0:
+                if not row[source_x].startswith("W") or moved_row[source_x] > 0:
                     continue
 
-                if y + 1 < len(old_level) and source_x < len(old_level[y + 1]):
-                    if old_level[y + 1][source_x] not in ("B", "C", "H", "W14"):
+                if y + 1 < height and source_x < len(old_level[y + 1]):
+                    if old_level[y + 1][source_x] not in ("B", "C", "H", "W14", "u", "b"):
                         continue
 
-                # Transfer a liquid step if the target height allows room below 14
-                if next_amounts[y][source_x] > 0 and next_amounts[y][target_x] < 14:
-                    next_amounts[y][source_x] -= 1
-                    next_amounts[y][target_x] += 1
+                if amount_row[source_x] > 0 and amount_row[target_x] < 14:
+                    amount_row[source_x] -= 1
+                    amount_row[target_x] += 1
 
-        # Re-map cellular states back onto the map grid
+        # Write the new water levels back
         for y, row in enumerate(old_level):
             for x, tile in enumerate(row):
-                amount = next_amounts[y][x]
-                if str(tile).startswith("W") or amount > 0:
+                amount = amounts[y][x]
+
+                if tile.startswith("W") or amount > 0:
                     self.level[y][x] = "." if amount <= 0 else "W" + str(amount)
 
         return self.level
 
+
+
     def lava_tick(self):
         old_level = [row[:] for row in self.level]
 
+        height = len(old_level)
+
         amounts = [
-            [int(str(tile)[1:]) if str(tile).startswith("L") else 0 for tile in row]
+            [int(tile[1:]) if tile.startswith("L") else 0 for tile in row]
             for row in old_level
         ]
 
@@ -255,23 +290,21 @@ class board:
         received_down = [[0] * len(row) for row in old_level]
 
         # Gravity: process from bottom to top
-        for y in range(len(old_level) - 1, -1, -1):
-            for x, tile in enumerate(old_level[y]):
-                if not str(tile).startswith("L"):
+        for y in range(height - 1, -1, -1):
+            row = old_level[y]
+
+            for x, tile in enumerate(row):
+                if not tile.startswith("L"):
                     continue
 
-                if y + 1 >= len(old_level):
-                    continue
-
-                if x >= len(old_level[y + 1]):
+                if y + 1 >= height or x >= len(old_level[y + 1]):
                     continue
 
                 below = old_level[y + 1][x]
 
-                if below in ("B", "C", "H", "L7", "K"):
+                if below in ("B", "C", "H", "L7", "K", "u", "b"):
                     continue
 
-                # Account for space created by lava moving down from this cell
                 capacity = (
                     7
                     - amounts[y + 1][x]
@@ -284,82 +317,67 @@ class board:
                 moved_down[y][x] = moved
                 received_down[y + 1][x] += moved
 
-        # Apply gravity together
-        next_amounts = [
-            [
-                amounts[y][x] - moved_down[y][x] + received_down[y][x]
-                for x in range(len(old_level[y]))
-            ]
-            for y in range(len(old_level))
-        ]
+        # Apply gravity directly to amounts
+        for y, row in enumerate(amounts):
+            for x in range(len(row)):
+                row[x] = row[x] - moved_down[y][x] + received_down[y][x]
 
         # Horizontal equalisation
-        # Each transfer moves one unit from a fuller cell to a lower cell
         for y, row in enumerate(old_level):
+            amount_row = amounts[y]
+            moved_row = moved_down[y]
+
             for x in range(len(row) - 1):
                 left_tile = row[x]
                 right_tile = row[x + 1]
 
-                # Only lava and empty spaces can contain lava
-                if left_tile != "." and not str(left_tile).startswith("L"):
+                if left_tile != "." and not left_tile.startswith("L"):
                     continue
 
-                if right_tile != "." and not str(right_tile).startswith("L"):
+                if right_tile != "." and not right_tile.startswith("L"):
                     continue
 
-                left_amount = next_amounts[y][x]
-                right_amount = next_amounts[y][x + 1]
+                left_amount = amount_row[x]
+                right_amount = amount_row[x + 1]
 
-                # A difference of 0 or 1 is already approximately equal
                 if abs(left_amount - right_amount) < 2:
                     continue
 
-                # Find the fuller cell and the lower cell
                 if left_amount > right_amount:
-                    source_x = x
-                    target_x = x + 1
+                    source_x, target_x = x, x + 1
                 else:
-                    source_x = x + 1
-                    target_x = x
+                    source_x, target_x = x + 1, x
 
-                # Only lava that was already present can spread sideways
-                if not str(row[source_x]).startswith("L"):
+                if not row[source_x].startswith("L"):
                     continue
 
-                # Lava that moved down this tick cannot also spread sideways
-                if moved_down[y][source_x] > 0:
+                if moved_row[source_x] > 0:
                     continue
 
-                # Lava only spreads sideways when blocked below
-                if y + 1 < len(old_level):
-                    if source_x < len(old_level[y + 1]):
-                        below = old_level[y + 1][source_x]
+                if y + 1 < height and source_x < len(old_level[y + 1]):
+                    below = old_level[y + 1][source_x]
 
-                        if below not in ("B", "C", "H", "L7", "K"):
-                            continue
+                    if below not in ("B", "C", "H", "L7", "K"):
+                        continue
 
-                # Transfer exactly one unit, preserving the L7 maximum
                 if (
-                    next_amounts[y][source_x] > 0
-                    and next_amounts[y][target_x] < 7
-                    and next_amounts[y][source_x]
-                        - next_amounts[y][target_x] >= 2
+                    amount_row[source_x] > 0
+                    and amount_row[target_x] < 7
+                    and amount_row[source_x] - amount_row[target_x] >= 2
                 ):
-                    next_amounts[y][source_x] -= 1
-                    next_amounts[y][target_x] += 1
+                    amount_row[source_x] -= 1
+                    amount_row[target_x] += 1
 
-        # Write the new lava levels back into the map
+        # Write the new lava levels back
         for y, row in enumerate(old_level):
             for x, tile in enumerate(row):
-                amount = next_amounts[y][x]
+                amount = amounts[y][x]
 
-                if str(tile).startswith("L") or amount > 0:
-                    if amount <= 0:
-                        self.level[y][x] = "."
-                    else:
-                        self.level[y][x] = "L" + str(amount)
+                if tile.startswith("L") or amount > 0:
+                    self.level[y][x] = "." if amount <= 0 else "L" + str(amount)
 
         return self.level
+
 
 
 

@@ -6,6 +6,7 @@ Created on Sun Jun 14 15:17:58 2026
 @author: ethanbrown
 """
 import time
+from tkinter import font
 
 import pygame
 import Player
@@ -23,6 +24,8 @@ import random
 import lava_sprites
 import speech_bubble
 import Enemies as Enemies_py
+import shutil
+
 
 class ImageManager:
     def __init__(self):
@@ -991,359 +994,306 @@ def level_complete(screen, levelNo):
         pygame.display.flip()
         clock.tick(60)
 
-def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_data=None, player_width=40, player_hight=40, boss=None, smokes=[], nausea_enabled=False, ticks=0, image_manager=None, speech=None, npcs=[]):
+def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_data=None,
+             player_width=40, player_hight=40, boss=None, smokes=None,
+             nausea_enabled=False, ticks=0, image_manager=None, speech=None, npcs=None):
     INVENTORY_WIDTH = 150
-    
+    TILE_SIZE = 40
+
     global nausea_time, walk_time, attack_time, hurt_time, last_hp, facing_left
+
+    if smokes is None:
+        smokes = []
+    if npcs is None:
+        npcs = []
 
     WIDTH, HEIGHT = screen.get_size()
     GAME_WIDTH = max(1, WIDTH - INVENTORY_WIDTH)
-
-    # Draw everything onto an off-screen surface
     game_surface = pygame.Surface((WIDTH, HEIGHT))
 
-    add = [0, 0]
+    # Calculate the camera offset directly instead of moving it one pixel
+    # at a time in while loops.
     camera_left = GAME_WIDTH * 0.34
     camera_right = GAME_WIDTH * 0.66
     camera_top = HEIGHT * 0.31
     camera_bottom = HEIGHT * 0.625
-    contemplating = True
-    while contemplating:
-        if (Player.y + add[1]) > camera_bottom or ((Player.y + add[1]) < camera_top and add[1] < 0):
-            if (Player.y + add[1]) > camera_bottom:
-                add[1] -= 1
-            else:
-                add[1] += 1
-        else:
-            contemplating = False
 
+    add_x = 0
+    add_y = 0
 
-    contemplating = True
-    while contemplating:
-        if (Player.x + add[0]) > camera_right or ((Player.x + add[0]) < camera_left and Player.x < camera_left):
-            if (Player.x + add[0]) > camera_right:
-                add[0] -= 1
-            else:
-                add[0] += 1
-        else:
-            contemplating = False
-    if add[0] > 0:
-        add[0] = 0
-    elif len(level[0]) * 40 + add[0] < GAME_WIDTH:
-        add[0] = GAME_WIDTH - len(level[0]) * 40
+    if Player.y > camera_bottom:
+        add_y = -math.ceil(Player.y - camera_bottom)
+    elif Player.y < camera_top:
+        add_y = math.ceil(camera_top - Player.y) if Player.y < camera_top else 0
+        # The original camera only moved upwards here when its offset was
+        # already negative. At the start of this calculation it is zero.
 
-    if add[1] > 0:
-        add[1] = 0
-    elif len(level) * 40 + add[1] < HEIGHT:
-        add[1] = HEIGHT - len(level) * 40
-        
-    # Draw game area with inventory panel offset
+    if Player.x > camera_right:
+        add_x = -math.ceil(Player.x - camera_right)
+    elif Player.x < camera_left:
+        add_x = math.ceil(camera_left - Player.x) if Player.x < camera_left else 0
+
+    # Keep the world from moving past its edges.
+    if add_x > 0:
+        add_x = 0
+    elif len(level[0]) * TILE_SIZE + add_x < GAME_WIDTH:
+        add_x = GAME_WIDTH - len(level[0]) * TILE_SIZE
+
+    if add_y > 0:
+        add_y = 0
+    elif len(level) * TILE_SIZE + add_y < HEIGHT:
+        add_y = HEIGHT - len(level) * TILE_SIZE
+
+    cam_x = int(add_x)
+    cam_y = int(add_y)
+
     game_surface.fill((0, 0, 0))
 
-    # Fixed scaling line
-    img = pygame.transform.scale(image_manager.load("background"), (WIDTH, HEIGHT))
-    game_surface.blit(img, (0, 0))
+    # Keep scaled assets between frames. image_manager.load() is only called
+    # when an asset/size is first needed.
+    if not hasattr(drawAll, "_image_cache"):
+        drawAll._image_cache = {}
 
+    image_cache = drawAll._image_cache
+    cache_prefix = id(image_manager)
 
-    # Only draw tiles that can appear on screen
+    def get_image(name, size):
+        key = (cache_prefix, name, size)
+        if key not in image_cache:
+            image_cache[key] = pygame.transform.scale(
+                image_manager.load(name), size
+            )
+        return image_cache[key]
 
-    # Only draw tiles that can appear on screen
-    # Force camera additions into integers to prevent floating-point sub-pixel jitter
-    cam_x = int(add[0])
-    cam_y = int(add[1])
+    game_surface.blit(get_image("background", (WIDTH, HEIGHT)), (0, 0))
 
-    # Use pure floor/ceiling adjustments with a guaranteed 2-tile buffer (pad left/right/top/bottom)
-    start_y = max(0, (-cam_y) // 40 - 3)
-    end_y = min(len(level), (HEIGHT - cam_y) // 40 + 3)
+    # Only visit the visible part of the level, with a small drawing buffer.
+    start_y = max(0, (-cam_y) // TILE_SIZE - 3)
+    end_y = min(len(level), (HEIGHT - cam_y) // TILE_SIZE + 3)
+    start_x = max(0, (-cam_x) // TILE_SIZE - 3)
+    end_x = min(len(level[0]), (GAME_WIDTH - cam_x) // TILE_SIZE + 3)
 
-    start_x = max(0, (-cam_x) // 40 - 3)
-    end_x = min(len(level[0]), (GAME_WIDTH - cam_x) // 40 + 3)
+    lava_frame = lava_sprites.get_frame(ticks)
 
-    # Draw background details
-    background_tile = pygame.transform.scale(
-        image_manager.load("back ground"), (160, 160)
-    )
-
+    background_tile = get_image("back ground", (160, 160))
     for y in range(start_y, end_y):
         for x in range(start_x, end_x):
             if x % 4 == 0 and y % 4 == 0:
                 game_surface.blit(
                     background_tile,
-                    (INVENTORY_WIDTH + x * 40 + cam_x,
-                     y * 40 + cam_y)
+                    (INVENTORY_WIDTH + x * TILE_SIZE + cam_x,
+                     y * TILE_SIZE + cam_y)
                 )
 
-
-    # Keep track of cells already drawn as part of large sprites
     visited_cells = set()
-
-    # Cache block image
     base_img = image_manager.load("block4")
-    half_w, half_h = base_img.get_width() // 2, base_img.get_height() // 2
+    block_width = base_img.get_width() // 4
+    block_height = base_img.get_height() // 4
 
-    # Draw map tiles
+    # Pre-scale the four-by-four block quadrants once, rather than creating
+    # and scaling a new subsurface for every visible block on every frame.
+    if not hasattr(drawAll, "_block_quadrants"):
+        drawAll._block_quadrants = {}
+    quadrant_key = (cache_prefix, base_img.get_width(), base_img.get_height())
+    if quadrant_key not in drawAll._block_quadrants:
+        drawAll._block_quadrants[quadrant_key] = [
+            pygame.transform.scale(
+                base_img.subsurface((
+                    qx * block_width, qy * block_height,
+                    block_width, block_height
+                )),
+                (TILE_SIZE, TILE_SIZE)
+            )
+            for qy in range(4) for qx in range(4)
+        ]
+    block_quadrants = drawAll._block_quadrants[quadrant_key]
+    large_block = get_image("block4", (160, 160))
+
+    # Frequently used tile sprites are loaded and scaled once.
+    sulfur_img = get_image("sulfur deposit", (70, 70))
+    drip_img = get_image("drip block", (80, 40))
+    coin_img = get_image("coin", (40, 40))
+    chest_img = get_image("chest", (40, 40))
+    web_img = get_image("spider web", (40, 40))
+    open_chest_img = get_image("open chest", (40, 40))
+    vine_img = get_image("vine", (40, 40))
+    vine_end_img = get_image("vine end", (40, 40))
+
     for y in range(start_y, end_y):
-        for x in range(start_x, end_x):
-
+        row = level[y]
+        for x in range(start_x, min(end_x, len(row))):
             if (x, y) in visited_cells:
                 continue
 
-            tile = level[y][x]
-
-            pos_x = INVENTORY_WIDTH + x * 40 + add[0]
-            pos_y = y * 40 + add[1]
-
-            # --------------------------------
-            # BLOCKS
-            # --------------------------------
+            tile = row[x]
+            pos_x = INVENTORY_WIDTH + x * TILE_SIZE + cam_x
+            pos_y = y * TILE_SIZE + cam_y
 
             if tile == "B" or tile == "b":
-
-                # Check whether a complete 4x4 block exists
+                # Preserve the existing 4x4 detection rule.
                 has_all = True
+                for check_y in range(4):
+                    check_row_y = y + check_y
+                    if check_row_y >= len(level):
+                        has_all = False
+                        break
+                    check_row = level[check_row_y]
+                    if x + 4 > len(check_row):
+                        has_all = False
+                        break
+                    for check_x in range(4):
+                        if check_row[x + check_x] != "b":
+                            has_all = False
+                            break
+                    if not has_all:
+                        break
 
-                if tile == "B":
-                    for check_y in range(4):
-                        for check_x in range(4):
-
-                            if (
-                                y + check_y >= len(level)
-                                or x + check_x >= len(level[y + check_y])
-                                or level[y + check_y][x + check_x] != "b"
-                            ):
-                                has_all = False
-
-                # Draw a complete 4x4 block
-                if tile == "B" and has_all:
-
-                    img = pygame.transform.scale(base_img, (160, 160))
-                    game_surface.blit(img, (pos_x, pos_y))
-
+                if has_all:
+                    game_surface.blit(large_block, (pos_x, pos_y))
                     for check_y in range(4):
                         for check_x in range(4):
                             visited_cells.add((x + check_x, y + check_y))
-
                 else:
-                    # Draw a single block using the correct quadrant
-                    crop_x = (x % 4) * (base_img.get_width() // 4)
-                    crop_y = (y % 4) * (base_img.get_height() // 4)
-
-                    cropped = base_img.subsurface(
-                        (
-                            crop_x,
-                            crop_y,
-                            base_img.get_width() // 4,
-                            base_img.get_height() // 4
-                        )
-                    )
-
-                    img = pygame.transform.scale(cropped, (40, 40))
-                    game_surface.blit(img, (pos_x, pos_y))
-
+                    quadrant = (y % 4) * 4 + (x % 4)
+                    game_surface.blit(block_quadrants[quadrant], (pos_x, pos_y))
                     visited_cells.add((x, y))
-            # --------------------------------
-            # SULFUR
-            # --------------------------------
 
             elif tile == "M":
-
-                img = pygame.transform.scale(
-                    image_manager.load("sulfur deposit"), (70, 70)
-                )
-
-                game_surface.blit(
-                    img,
-                    (pos_x - 20, pos_y + 10)
-                )
-
-            # --------------------------------
-            # LAVA DRIPPER
-            # --------------------------------
+                game_surface.blit(sulfur_img, (pos_x - 20, pos_y + 10))
 
             elif tile == "D":
+                game_surface.blit(drip_img, (pos_x, pos_y))
 
-                img = pygame.transform.scale(
-                    image_manager.load("drip block"), (80, 40)
-                )
-
-                game_surface.blit(img, (pos_x, pos_y))
-
-            # --------------------------------
-            # LAVA
-            # --------------------------------
-
-            elif str(tile).startswith("L"):
-
-                above = (
-                    y > 0
-                    and str(level[y - 1][x]).startswith("L")
-                )
-
+            elif isinstance(tile, str) and tile.startswith("L"):
+                above = y > 0 and str(level[y - 1][x]).startswith("L")
                 lava_sprites.draw_lava(
                     game_surface,
                     pos_x,
                     pos_y,
                     int(str(tile)[1:]),
                     above,
-                    ticks
+                    lava_frame
                 )
-
-            # --------------------------------
-            # COINS
-            # --------------------------------
 
             elif tile == "C":
-
-                img = pygame.transform.scale(
-                    image_manager.load("coin"), (40, 40)
-                )
-
-                game_surface.blit(img, (pos_x, pos_y))
-
-            # --------------------------------
-            # CHESTS
-            # --------------------------------
+                game_surface.blit(coin_img, (pos_x, pos_y))
 
             elif tile == "H":
+                game_surface.blit(chest_img, (pos_x, pos_y))
 
-                img = pygame.transform.scale(
-                    image_manager.load("chest"), (40, 40)
-                )
-
-                game_surface.blit(img, (pos_x, pos_y))
+            elif tile == "u":
+                game_surface.blit(web_img, (pos_x, pos_y))
 
             elif tile == "K":
-
-                img = pygame.transform.scale(
-                    image_manager.load("open chest"), (40, 40)
-                )
-
-                game_surface.blit(img, (pos_x, pos_y))
-
-            # --------------------------------
-            # VINES
-            # --------------------------------
+                game_surface.blit(open_chest_img, (pos_x, pos_y))
 
             elif tile == "P":
-
-                if y + 1 < len(level) and level[y + 1][x] == "P":
-
-                    img = pygame.transform.scale(
-                        image_manager.load("vine"), (40, 40)
-                    )
-
+                if y + 1 < len(level) and x < len(level[y + 1]) and level[y + 1][x] == "P":
+                    game_surface.blit(vine_img, (pos_x, pos_y))
                 else:
+                    game_surface.blit(vine_end_img, (pos_x, pos_y))
 
-                    img = pygame.transform.scale(
-                        image_manager.load("vine end"), (40, 40)
-                    )
-
-                game_surface.blit(img, (pos_x, pos_y))
-
-            # --------------------------------
-            # WATER
-            # --------------------------------
-
-            elif str(tile).startswith("W"):
-
-                water_number = int(str(tile)[1:])
-                water_height = max(1, round(water_number * (40 / 14)))
-
+            elif isinstance(tile, str) and tile.startswith("W"):
+                water_number = int(tile[1:])
+                water_height = max(1, round(water_number * (TILE_SIZE / 14)))
                 water_rect = pygame.Rect(
-                    pos_x,
-                    pos_y + 40 - water_height,
-                    40,
-                    water_height
+                    pos_x, pos_y + TILE_SIZE - water_height,
+                    TILE_SIZE, water_height
                 )
-
-                pygame.draw.rect(
-                    game_surface,
-                    (20, 110, 220),
-                    water_rect
-                )
-
+                pygame.draw.rect(game_surface, (20, 110, 220), water_rect)
                 inner_rect = water_rect.inflate(-4, -2)
-
                 if inner_rect.width > 0 and inner_rect.height > 0:
-
                     pygame.draw.rect(
-                        game_surface,
-                        (100, 180, 255),
-                        (
-                            inner_rect.x,
-                            inner_rect.y,
-                            inner_rect.width,
-                            max(1, min(3, inner_rect.height // 2))
-                        )
+                        game_surface, (100, 180, 255),
+                        (inner_rect.x, inner_rect.y, inner_rect.width,
+                         max(1, min(3, inner_rect.height // 2)))
                     )
 
-    for i in range(len(smokes)):
-        pygame.draw.rect(game_surface, smokes[i].color, (INVENTORY_WIDTH + smokes[i].x + add[0], smokes[i].y + add[1], 40, 40))
-    
-    for i in range(len(bullets)):
-        if bullets[i] is not None:
-            pygame.draw.rect(game_surface, (255, 255, 255), (INVENTORY_WIDTH + bullets[i].x+add[0], bullets[i].y+add[1], bullets[i].size_width, bullets[i].size_width)) 
+    for smoke in smokes:
+        pygame.draw.rect(
+            game_surface, smoke.color,
+            (INVENTORY_WIDTH + smoke.x + add_x, smoke.y + add_y, 40, 40)
+        )
 
-    for i in range(len(enemies)):
-        img = pygame.transform.scale(image_manager.load("enemy"), (60, 60))
-        if enemies[i].going_left:
-            img = pygame.transform.flip(img, True, False)
-        game_surface.blit(img, (INVENTORY_WIDTH + enemies[i].x+add[0] - 7, enemies[i].y+add[1] - 15))
+    for bullet in bullets:
+        if bullet is not None:
+            pygame.draw.rect(
+                game_surface, (255, 255, 255),
+                (INVENTORY_WIDTH + bullet.x + add_x, bullet.y + add_y,
+                 bullet.size_width, bullet.size_width)
+            )
+
+    enemy_img = get_image("enemy", (60, 60))
+    enemy_img_flipped = pygame.transform.flip(enemy_img, True, False)
+    for enemy in enemies:
+        img = enemy_img_flipped if enemy.going_left else enemy_img
+        game_surface.blit(
+            img,
+            (INVENTORY_WIDTH + enemy.x + add_x - 7,
+             enemy.y + add_y - 15)
+        )
 
     if boss is not None:
         boss_rect = pygame.Rect(
-            INVENTORY_WIDTH + boss.x + add[0],
-            boss.y + add[1],
-            boss.width,
-            boss.hight
+            INVENTORY_WIDTH + boss.x + add_x, boss.y + add_y,
+            boss.width, boss.hight
         )
         pygame.draw.rect(game_surface, (190, 35, 15), boss_rect)
         pygame.draw.rect(game_surface, (255, 130, 20), boss_rect.inflate(-12, -12))
         health_width = round(boss.width * max(0, boss.hp) / boss.max_hp)
         pygame.draw.rect(
-            game_surface,
-            (60, 0, 0),
+            game_surface, (60, 0, 0),
             (boss_rect.x, boss_rect.y - 8, boss.width, 5)
         )
         pygame.draw.rect(
-            game_surface,
-            (255, 30, 20),
+            game_surface, (255, 30, 20),
             (boss_rect.x, boss_rect.y - 8, health_width, 5)
         )
         for attack in boss.attackCurrents:
             pygame.draw.rect(
-                game_surface,
-                (255, 80, 0),
-                (
-                    INVENTORY_WIDTH + attack.x + add[0],
-                    attack.y + add[1],
-                    attack.size_width,
-                    attack.size_hight
-                )
+                game_surface, (255, 80, 0),
+                (INVENTORY_WIDTH + attack.x + add_x, attack.y + add_y,
+                 attack.size_width, attack.size_hight)
             )
-    
-    # Draw weapon attacks
-    if bullets[0] is not None:
-        pygame.draw.rect(game_surface, (255, 100, 0), (INVENTORY_WIDTH + bullets[0].x+add[0], bullets[0].y+add[1], bullets[0].size_width, bullets[0].size_hight))
-    if bullets[1] is not None:
-        pygame.draw.rect(game_surface, (255, 200, 0), (INVENTORY_WIDTH + bullets[1].x+add[0], bullets[1].y+add[1], bullets[1].size_width, bullets[1].size_hight))
-    
-    # Draw UI stats (shifted for inventory panel)
-    font = pygame.font.SysFont(None, 30)
-    text = font.render(str(hp), True, (255, 0, 0))
-    text_rect = text.get_rect(center=(WIDTH - 30, 30))
-    game_surface.blit(text, text_rect)
-    text = font.render(str(coins), True, (255, 255, 0))
-    text_rect = text.get_rect(center=(INVENTORY_WIDTH + 30, 30))
-    game_surface.blit(text, text_rect)
-    if dam:
-        damage = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        damage.fill((255, 0, 0, 100))
-        game_surface.blit(damage, (0, 0))
 
-    # ==========================================
-    # CHOOSE PLAYER ATTACK OR IDLE SPRITE
-    # ==========================================
+    # Keep the existing special colours for the first two weapon bullets.
+    if bullets and bullets[0] is not None:
+        pygame.draw.rect(
+            game_surface, (255, 100, 0),
+            (INVENTORY_WIDTH + bullets[0].x + add_x,
+             bullets[0].y + add_y,
+             bullets[0].size_width, bullets[0].size_hight)
+        )
+    if len(bullets) > 1 and bullets[1] is not None:
+        pygame.draw.rect(
+            game_surface, (255, 200, 0),
+            (INVENTORY_WIDTH + bullets[1].x + add_x,
+             bullets[1].y + add_y,
+             bullets[1].size_width, bullets[1].size_hight)
+        )
+
+    # Cache fonts as well: constructing SysFont objects every frame is wasteful.
+    if not hasattr(drawAll, "_font_cache"):
+        drawAll._font_cache = {}
+    if 30 not in drawAll._font_cache:
+        drawAll._font_cache[30] = pygame.font.SysFont(None, 30)
+    if 24 not in drawAll._font_cache:
+        drawAll._font_cache[24] = pygame.font.SysFont(None, 24)
+    if 20 not in drawAll._font_cache:
+        drawAll._font_cache[20] = pygame.font.SysFont(None, 20)
+
+    font = drawAll._font_cache[30]
+    text = font.render(str(hp), True, (255, 0, 0))
+    game_surface.blit(text, text.get_rect(center=(WIDTH - 30, 30)))
+    text = font.render(str(coins), True, (255, 255, 0))
+    game_surface.blit(text, text.get_rect(center=(INVENTORY_WIDTH + 30, 30)))
+
+    if dam:
+        if not hasattr(drawAll, "_damage_overlay") or drawAll._damage_overlay.get_size() != (WIDTH, HEIGHT):
+            drawAll._damage_overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            drawAll._damage_overlay.fill((255, 0, 0, 100))
+        game_surface.blit(drawAll._damage_overlay, (0, 0))
+
     if Player.equipped['weapon'] in ['Sword +3', 'Sword +1', 'Dagger +1']:
         weapon_set = "sword"
     elif Player.equipped['weapon'] in ['Bow +3', 'Bow']:
@@ -1353,27 +1303,25 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     else:
         weapon_set = "sword"
 
-    # Moving left/right (last_x is set at the start of every tick in run())
     moved = Player.x - getattr(Player, "last_x", Player.x)
     if moved < 0:
         facing_left = True
     elif moved > 0:
         facing_left = False
 
-    # Animation timers
     if last_hp is not None and hp < last_hp:
         hurt_time = 0
     last_hp = hp
     walk_time = walk_time + 1 if moved != 0 else 0
     frames = ATTACK_FRAMES[weapon_set]
+
     if attack_time > 0:
         attack_time += 1
-    if attack_time == 0 and bullets[0] is not None:
+    if attack_time == 0 and bullets and bullets[0] is not None:
         attack_time = 1
     if attack_time > len(frames) * ATTACK_TICKS:
-        attack_time = 1 if bullets[0] is not None else 0   # keep looping while the attack is still active
+        attack_time = 1 if bullets and bullets[0] is not None else 0
 
-    # Priority: hurt > attacking > walking > standing with weapon
     if hurt_time < 6 * HURT_TICKS:
         image_name = f"knight hurt {hurt_time // HURT_TICKS}"
         hurt_time += 1
@@ -1384,73 +1332,412 @@ def drawAll(screen, level, Player, bullets, hp, dam, coins, enemies, inventory_d
     else:
         image_name = f"knight {weapon_set} 0"
 
-    # The sheet frames are square and face right, so scale evenly and flip when walking left
-    size = Player.hight + 44  
-    img = pygame.transform.scale(image_manager.load(image_name), (size, size))
+    size = Player.hight + 44
+    img = get_image(image_name, (size, size))
     if facing_left:
-        img = pygame.transform.flip(img, True, False)
+        flip_key = (cache_prefix, image_name, size, "flipped")
+        if flip_key not in image_cache:
+            image_cache[flip_key] = pygame.transform.flip(img, True, False)
+        img = image_cache[flip_key]
 
-    # ─── CRITICAL CORRECTION ──────────────────────────────────────────
-    # Explicitly calculate where the player belongs relative to the camera
-    # ──────────────────────────────────────────────────────────────────
-    player_screen_x = INVENTORY_WIDTH + Player.x + add[0] - (size - Player.width) // 2
-    player_screen_y = Player.y + add[1] - (size - Player.hight)
-    
+    player_screen_x = INVENTORY_WIDTH + Player.x + add_x - (size - Player.width) // 2
+    player_screen_y = Player.y + add_y - (size - Player.hight)
     game_surface.blit(img, (player_screen_x, player_screen_y))
 
-    # NPC speech bubbles, drawn above the wizard's head
     if speech:
-        bubble_font = pygame.font.SysFont(None, 24)
+        bubble_font = drawAll._font_cache[24]
         for npc_x, npc_y, npc_text in speech:
             speech_bubble.draw_speech_bubble(
                 game_surface, image_manager, bubble_font, npc_text,
-                INVENTORY_WIDTH + npc_x + 20 + add[0],
-                npc_y + 40 - WIZARD_HEIGHT + add[1]
+                INVENTORY_WIDTH + npc_x + 20 + add_x,
+                npc_y + 40 - WIZARD_HEIGHT + add_y
             )
 
+    wizard_img_cache = {}
     for npc in npcs:
-        npc_screen_x = INVENTORY_WIDTH + npc.x + add[0] - 40
-        npc_screen_y = npc.y + add[1] -40
-        img = pygame.transform.scale(image_manager.load("wizard"), (npc.width + 88, npc.hight + 50))
-        game_surface.blit(img, (npc_screen_x, npc_screen_y))
-    
-    # Draw inventory panel (fixed, not affected by camera)
-    if inventory_data:
-        draw_inventory(game_surface, inventory_data, pygame.font.SysFont(None, 20))
-    
-    # ==========================================
-    # NAUSEA / WORLD WOBBLE EFFECT
-    # ==========================================
-
-    if nausea_enabled:
-
-        nausea_time += 1 / 40
-
-        # Horizontal and vertical oscillation
-        wobble_x = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
-        wobble_y = math.cos(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
-
-        # Slight rotational wobble
-        angle = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_ROTATION
-
-        # Rotate entire game image
-        rotated = pygame.transform.rotate(game_surface, angle)
-
-        # Centre image and apply movement
-        rotated_rect = rotated.get_rect(
-            center=(
-                WIDTH // 2 + wobble_x,
-                HEIGHT // 2 + wobble_y
-            )
+        npc_size = (npc.width + 88, npc.hight + 50)
+        if npc_size not in wizard_img_cache:
+            wizard_img_cache[npc_size] = get_image("wizard", npc_size)
+        game_surface.blit(
+            wizard_img_cache[npc_size],
+            (INVENTORY_WIDTH + npc.x + add_x - 40, npc.y + add_y - 40)
         )
 
+    if inventory_data:
+        draw_inventory(game_surface, inventory_data, drawAll._font_cache[20])
+
+    if nausea_enabled:
+        nausea_time += 1 / 40
+        wobble_x = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
+        wobble_y = math.cos(nausea_time * NAUSEA_SPEED) * NAUSEA_STRENGTH
+        angle = math.sin(nausea_time * NAUSEA_SPEED) * NAUSEA_ROTATION
+        rotated = pygame.transform.rotate(game_surface, angle)
+        rotated_rect = rotated.get_rect(
+            center=(WIDTH // 2 + wobble_x, HEIGHT // 2 + wobble_y)
+        )
         screen.fill((0, 0, 0))
         screen.blit(rotated, rotated_rect)
-
     else:
         screen.blit(game_surface, (0, 0))
 
     return screen
+
+
+
+def map(screen, map_x_scroll, mouse_click=None):
+    width, height = screen.get_size()
+
+    # -------------------------------------------------
+    # COLOURS
+    # -------------------------------------------------
+
+    background = (13, 16, 23)
+    cave_colour = (23, 28, 37)
+    cave_highlight = (37, 43, 53)
+    path_shadow = (65, 55, 43)
+    path_colour = (160, 125, 77)
+    normal_colour = (105, 119, 130)
+    normal_highlight = (180, 193, 198)
+    boss_colour = (180, 55, 25)
+    boss_highlight = (255, 125, 40)
+    white = (235, 230, 215)
+
+    # -------------------------------------------------
+    # FONTS
+    # -------------------------------------------------
+
+    title_font = pygame.font.SysFont(None, 58)
+    room_font = pygame.font.SysFont(None, 27)
+    small_font = pygame.font.SysFont(None, 23)
+
+    # -------------------------------------------------
+    # LOAD DISCOVERED ROOMS
+    # -------------------------------------------------
+
+    with open("world_save.json", "r") as file:
+        world_data = json.load(file)
+
+    world = world_data.get("world", {})
+
+    if not isinstance(world, dict):
+        world = {}
+
+    normal_rooms = world.get("normal_rooms_found", [])
+    boss_rooms = world.get("boss_rooms_completed", [])
+
+    if not isinstance(normal_rooms, list):
+        normal_rooms = []
+
+    if not isinstance(boss_rooms, list):
+        boss_rooms = []
+
+    destinations = []
+
+    for room_name in normal_rooms:
+        if isinstance(room_name, str):
+            destinations.append(room_name)
+
+    if "Fire Boss Room" in boss_rooms:
+        destinations = [
+            room for room in destinations
+            if room != "Level 20"
+        ]
+
+        destinations.append("Fire Boss Room")
+
+    # -------------------------------------------------
+    # SORT ROOMS
+    # -------------------------------------------------
+
+    def map_room_order(room_name):
+
+        if room_name == "Fire Boss Room":
+            return 20
+
+        if room_name.startswith("Level "):
+            try:
+                return int(room_name.split(" ")[1])
+            except ValueError:
+                return 9999
+
+        return 9999
+
+    destinations.sort(key=map_room_order)
+
+    # -------------------------------------------------
+    # BACKGROUND
+    # -------------------------------------------------
+
+    screen.fill(background)
+
+    # Cave ceiling
+    pygame.draw.polygon(
+        screen,
+        cave_colour,
+        [
+            (0, 0),
+            (width, 0),
+            (width, 120),
+            (width - 100, 145),
+            (width - 230, 115),
+            (width - 380, 155),
+            (width - 520, 120),
+            (0, 150)
+        ]
+    )
+
+    # Cave floor
+    pygame.draw.polygon(
+        screen,
+        cave_colour,
+        [
+            (0, height),
+            (width, height),
+            (width, height - 90),
+            (width - 180, height - 115),
+            (width - 350, height - 85),
+            (width - 500, height - 120),
+            (0, height - 90)
+        ]
+    )
+
+    # Small cave details
+    for i in range(35):
+
+        x = (i * 173) % width
+        y = 170 + ((i * 97) % max(1, height - 300))
+
+        pygame.draw.circle(
+            screen,
+            cave_highlight,
+            (x, y),
+            2
+        )
+
+    # -------------------------------------------------
+    # TITLE
+    # -------------------------------------------------
+
+    title = title_font.render(
+        "THE UNDERGROUND",
+        True,
+        white
+    )
+
+    screen.blit(title, (40, 25))
+
+    subtitle = small_font.render(
+        "KNOWN PASSAGES AND DISCOVERED ROOMS",
+        True,
+        (145, 151, 155)
+    )
+
+    screen.blit(subtitle, (43, 78))
+
+    # -------------------------------------------------
+    # ROOM POSITIONS
+    # -------------------------------------------------
+
+    room_positions = []
+
+    room_heights = [
+        310,
+        420,
+        290,
+        390,
+        330
+    ]
+
+    for i, room_name in enumerate(destinations):
+
+        x = 130 + i * 230 - map_x_scroll
+        y = room_heights[i % len(room_heights)]
+
+        room_positions.append((x, y, room_name))
+
+    # -------------------------------------------------
+    # CONNECTING PATHS
+    # -------------------------------------------------
+
+    for i in range(len(room_positions) - 1):
+
+        x1, y1, name1 = room_positions[i]
+        x2, y2, name2 = room_positions[i + 1]
+
+        middle_x = (x1 + x2) // 2
+        middle_y = (y1 + y2) // 2
+
+        if i % 2 == 0:
+            middle_y += 45
+        else:
+            middle_y -= 45
+
+        points = [
+            (x1, y1),
+            (middle_x, middle_y),
+            (x2, y2)
+        ]
+
+        # Dark outline
+        pygame.draw.lines(
+            screen,
+            path_shadow,
+            False,
+            points,
+            18
+        )
+
+        # Actual path
+        pygame.draw.lines(
+            screen,
+            path_colour,
+            False,
+            points,
+            7
+        )
+
+    # -------------------------------------------------
+    # ROOM MARKERS
+    # -------------------------------------------------
+
+    for i, room_data in enumerate(room_positions):
+
+        x, y, room_name = room_data
+
+        boss_room = room_name == "Fire Boss Room"
+
+        if boss_room:
+            colour = boss_colour
+            highlight = boss_highlight
+            radius = 35
+        else:
+            colour = normal_colour
+            highlight = normal_highlight
+            radius = 29
+
+        # Hover detection
+        marker_rect = pygame.Rect(
+            x - 42,
+            y - 42,
+            84,
+            84
+        )
+
+        label_rect = pygame.Rect(
+            x - 90,
+            y + 48,
+            180,
+            45
+        )
+
+        hovered = (
+            marker_rect.collidepoint(pygame.mouse.get_pos())
+            or label_rect.collidepoint(pygame.mouse.get_pos())
+        )
+
+        if hovered:
+            radius += 5
+
+        # Outer ring
+        pygame.draw.circle(
+            screen,
+            highlight,
+            (x, y),
+            radius + 7
+        )
+
+        # Main marker
+        pygame.draw.circle(
+            screen,
+            colour,
+            (x, y),
+            radius
+        )
+
+        # Centre
+        pygame.draw.circle(
+            screen,
+            highlight,
+            (x, y),
+            9
+        )
+
+        # Room label background
+        pygame.draw.rect(
+            screen,
+            (25, 29, 37),
+            label_rect,
+            border_radius=6
+        )
+
+        pygame.draw.rect(
+            screen,
+            highlight,
+            label_rect,
+            2,
+            border_radius=6
+        )
+
+        label = room_font.render(
+            room_name,
+            True,
+            white
+        )
+
+        screen.blit(
+            label,
+            label.get_rect(center=label_rect.center)
+        )
+
+        # Special boss label
+        if boss_room:
+
+            boss_text = small_font.render(
+                "BOSS",
+                True,
+                boss_highlight
+            )
+
+            screen.blit(
+                boss_text,
+                boss_text.get_rect(
+                    center=(x, y - 53)
+                )
+            )
+
+        # Clicking a room
+        if mouse_click is not None:
+
+            if marker_rect.collidepoint(mouse_click):
+                return room_name
+
+            if label_rect.collidepoint(mouse_click):
+                return room_name
+
+    # -------------------------------------------------
+    # FOOTER
+    # -------------------------------------------------
+
+    pygame.draw.rect(
+        screen,
+        (20, 24, 32),
+        (0, height - 48, width, 48)
+    )
+
+    instructions = small_font.render(
+        "A / D or LEFT / RIGHT = MOVE MAP     |     M = CLOSE MAP",
+        True,
+        (180, 185, 190)
+    )
+
+    screen.blit(
+        instructions,
+        instructions.get_rect(
+            center=(width // 2, height - 24)
+        )
+    )
+
+
 
 def death(screen):
     menue = True
@@ -1629,6 +1916,14 @@ def run():
             
             while runwin:
                 num = str(levelNo)
+
+                if levelNo == 20:
+                    base_dir = os.path.dirname(os.path.abspath(__file__))
+                    levels_dir = os.path.join(base_dir, "assets", "levels")
+                    source_file = os.path.join(levels_dir, "level40A.txt")
+                    destination_file = os.path.join(levels_dir, "level20.txt")
+                    shutil.copyfile(source_file, destination_file)
+
                 
                 with open(
                     os.path.join(BASE_DIR, 'assets', 'levels', f'level{levelNo}.txt'),
@@ -1681,7 +1976,7 @@ def run():
                 a = aBoard.findPoint("S")
                 player_1.x = a[0]
                 player_1.y = a[1]
-                enemies = aBoard.spawn()
+                enemies = aBoard.spawn(levelNo)
                 speech = []
                 npcs = []
                 for y in range(len(level)):
@@ -1709,9 +2004,56 @@ def run():
 
                 Generator.run(f"level{str(levelNo + 1)}", levelNo + 1)
 
+                if levelNo == 20:
+                    with open("world_save.json", "r") as file:
+                        world_data = json.load(file)
+
+                    world = world_data.get("world")
+                    if not isinstance(world, dict):
+                        world = {}
+                        world_data["world"] = world
+
+                    boss_rooms = world.get("boss_rooms_completed")
+                    if not isinstance(boss_rooms, list):
+                        boss_rooms = []
+                        world["boss_rooms_completed"] = boss_rooms
+
+                    if "Fire Boss Room" not in boss_rooms:
+                        boss_rooms.append("Fire Boss Room")
+
+                    with open("world_save.json", "w") as file:
+                        json.dump(world_data, file)
+                else:
+                    with open("world_save.json", "r") as file:
+                        world_data = json.load(file)
+
+                    world = world_data.get("world")
+                    if not isinstance(world, dict):
+                        world = {}
+                        world_data["world"] = world
+
+                    normal_rooms = world.get("normal_rooms_found")
+                    if not isinstance(normal_rooms, list):
+                        normal_rooms = []
+                        world["normal_rooms_found"] = normal_rooms
+
+                    room_name = f"Level {levelNo}"
+                    if room_name not in normal_rooms:
+                        normal_rooms.append(room_name)
+                    
+                    with open("world_save.json", "w") as file:
+                        json.dump(world_data, file)
+                
+                map_show = False
+
+                was_map_show = False
+
+                map_x_scroll = 0
+
                 while running:
 
                     simulation_start = time.perf_counter()
+                    map_click_pos = None
 
 
                     #helpfull for stomping on enemies heads
@@ -1735,9 +2077,13 @@ def run():
                             if event.key == pygame.K_LSHIFT or event.key == pygame.K_x:
                                 holding_super_attack = True
                             if event.key == pygame.K_c:
+                                player_1.level = level
                                 player_1.use_item(enemies + ([boss] if boss is not None else []))
+                                level = player_1.level
                             if event.key == pygame.K_v:
                                 player_1.switch_inventory_section()
+                            if event.key == pygame.K_m:
+                                map_show = not map_show
                             if event.key == pygame.K_e:
                                 for npc in npcs:
                                     if npc.is_near_player(player_1):
@@ -1775,16 +2121,30 @@ def run():
                             if event.button == 2:  # Middle mouse button
                                 player_1.switch_inventory_section()
                             elif event.button == 1:  # Left mouse button to equip
-                                player_1.equip_item(enemies + ([boss] if boss is not None else []))
+                                if map_show:
+                                    map_click_pos = event.pos
+                                else:
+                                    player_1.equip_item(enemies + ([boss] if boss is not None else []))
                         
                     #movement
                     keys = pygame.key.get_pressed()
                     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-                        player_1.move(True, False)
+                        if map_show:
+                            map_x_scroll -= 20
+                        else:
+                            player_1.move(True, False)
                     if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-                        player_1.move(False, True)
+                        if map_show:
+                            map_x_scroll += 20
+                        else:
+                            player_1.move(False, True)
                     if keys[pygame.K_DOWN] or keys[pygame.K_s]:
                         player_1.climb_down()
+
+                    mouse_pos = pygame.mouse.get_pos()
+
+                    if map_show and not was_map_show:
+                        map_x_scroll = 0
 
                     aBoard.level = level
 
@@ -1809,7 +2169,7 @@ def run():
                     if holding_super_attack and player_1.current_super is None and player_1.super_charged:
                         player_1.super_attack()
 
-                    player_1.update_attacks(holding_attack, holding_super_attack, extraa)
+                    player_1.update_attacks(holding_attack, holding_super_attack, extraa, enemies)
                     extraa = False
                     
                     #fall out the world death
@@ -1849,6 +2209,10 @@ def run():
                     
                     #player gravity
                     player_1.update_vy()
+
+                    player_1.level = level
+                    player_1.WaterTick()
+                    player_1.spider_webs()
             
                     if player_1.timefrozen:
                         if player_1.timefrozenat is None:
@@ -1864,7 +2228,9 @@ def run():
                             enemy = enemies[i]
                         
                             enemy.update_vy()
+                            enemy.level = level
                             enemy.move(ticks, Player=player_1)
+                            level = enemy.level
                         
                             # Check weapon hits
                             hit_by_weapon = False
@@ -1912,9 +2278,10 @@ def run():
                         
                             i += 1
 
-
+                        was_boss = False
 
                         if bosses is not None:
+                            was_boss = True
                             print(boss.hp)
                             boss.update_vy()
                             boss.run(player_1.x, player_1.y)
@@ -1932,6 +2299,7 @@ def run():
                                     boss.being_damaged = True
                                     if boss.hp <= 0:
                                         player_1.killed_enemies()
+                                        was_boss = False
                                         bosses = None
                                         boss = None
                                         break
@@ -1957,9 +2325,20 @@ def run():
 
                                 if boss.hp <= 0:
                                     player_1.killed_enemies()
+                                    was_boss = False
                                     bosses = None
                                     boss = None
-                    
+
+                    if not was_boss:
+                        for y in range(len(level)):
+                            for x in range(len(level[y])):
+                                if level[y][x] == 'p':
+                                    level[y][x] = 'P'
+
+                    player_1.level = level
+                    player_1.broken_blocks()
+                    level = player_1.level
+
                     #open chests
                     a = aBoard.getPlayerBlocks(x=player_1.x, y=player_1.y)
                     for i in range(len(a)):
@@ -1991,21 +2370,27 @@ def run():
                     }
 
                     if ticks % LAVA_SPEED == 0:
+                        start_laval = time.perf_counter()
+
                         level = aBoard.lava_tick()
+
+                        print("Lava:", ((time.perf_counter() - start_laval) * 1000, 2), "ms")
+
                         player_1.level = level
+
                         for i in range(len(enemies)):
                             enemies[i].level = level
 
 
-                    WATER_SPEED = 10 # Water flows faster than lava!
+                    WATER_SPEED = 10
                     if ticks % WATER_SPEED == 0:
-                        level = aBoard.water_tick()
-                        player_1.level = level
+                        start_water = time.perf_counter()
 
-                    level = aBoard.water_drain()
-                    player_1.WaterTick(
-                        diving=keys[pygame.K_DOWN] or keys[pygame.K_s]
-                    )
+                        level = aBoard.water_tick()
+
+                        print("Water:", ((time.perf_counter() - start_water) * 1000, 2), "ms")
+
+                        player_1.level = level
 
 
                     level = aBoard.lava_drain()
@@ -2100,15 +2485,30 @@ def run():
                     speech = [(npc.x, npc.y, npc.text()) for npc in npcs if npc.is_near_player(player_1)]
 
                     rendering_start = time.perf_counter()
-                    
-                    screen = drawAll(
-                        screen, level, player_1,
-                        bullets=[player_1.current_attack, player_1.current_super],
-                        hp=player_1.hp, dam=dam, coins=player_1.coins,
-                        enemies=enemies, inventory_data=inventory_data,
-                        player_width=player_1.width, player_hight=player_1.hight,
-                        boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled, ticks=ticks, image_manager=image_manager, speech=speech, npcs=npcs
-                    )
+
+                    if map_show:
+                        map_return = map(screen, map_x_scroll, mouse_click=map_click_pos)
+
+                        if map_return is not None:
+                            level_name = map_return
+
+                            if level_name == "Fire Boss Room":
+                                levelNo = 19
+                            else:
+                                levelNo = int(level_name.split(" ")[1]) - 1
+
+                            running = False
+                    else:
+                        screen = drawAll(
+                            screen, level, player_1,
+                            bullets=[player_1.current_attack, player_1.current_super],
+                            hp=player_1.hp, dam=dam, coins=player_1.coins,
+                            enemies=enemies, inventory_data=inventory_data,
+                            player_width=player_1.width, player_hight=player_1.hight,
+                            boss=boss if bosses is not None else None, smokes=smokes, nausea_enabled=nausea_enabled, ticks=ticks, image_manager=image_manager, speech=speech, npcs=npcs
+                        )
+
+                    was_map_show = map_show
 
                     if text_show:
                         screen.fill((0, 0, 0))
@@ -2141,12 +2541,6 @@ def run():
 
                     rendering_time = time.perf_counter() - rendering_start
 
-                    print(
-                        f"Simulation: {simulation_time * 1000:.2f} ms | "
-                        f"Rendering: {rendering_time * 1000:.2f} ms"
-                    )
-
-                    print(player_1.x / 40, '             ', player_1.y / 40)
 
                     pygame.display.flip()
                     clock.tick(40)

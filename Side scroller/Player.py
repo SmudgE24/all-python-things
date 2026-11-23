@@ -29,6 +29,11 @@ class player:
 
         self.luck = 0
 
+        try:
+            self.start_speed = self.speed
+        except:
+            pass
+
         self.revive = 2
         self.start_hp = hp
 
@@ -129,22 +134,45 @@ class player:
         MIN_X = INVENTORY_WIDTH / 40  # Convert to block units (40 pixels per block)
         
         if left:
-            if not self.is_touching_wall_left(block, Or):
+            if not self.is_touching_wall_left(block, Or) or not self.is_touching_wall_left('b', Or):
                 for i in range(self.speed):
-                    if not self.is_touching_wall_left(block, Or) and self.x > MIN_X:
+                    if not self.is_touching_wall_left(block, Or):
                         self.x -= 1
                     else:
                         pass
             self.going_left = True
 
         if right:
-            if not self.is_touching_wall_right(block, Or):
+            if not self.is_touching_wall_right(block, Or) or not self.is_touching_wall_right('b', Or):
                 for i in range(self.speed):
                     if not self.is_touching_wall_right(block, Or):
                         self.x += 1
                     else:
                         pass
             self.going_left = False
+
+    def broken_blocks(self):
+        if self.is_on_wall("b", True):
+            left = (self.x + 1) // 40
+            right = (self.x + self.width - 1) // 40
+            bottom = (self.y + self.hight) // 40
+
+            for column in range(left, right + 1):
+                if bottom < 0 or bottom >= len(self.level):
+                    continue
+                if column < 0 or column >= len(self.level[bottom]):
+                    continue
+                if self.level[bottom][column] == "b":
+                    self.level[bottom][column] = "."
+        for y in range(len(self.level)):
+            for x in range(len(self.level[y])):
+                if self.current_attack is not None:
+                    a = self.current_attack.touching_block('b')
+                    if a is not False:
+                        try:
+                            self.level[a[0]][a[1]] = "."
+                        except IndexError:
+                            pass
 
     def is_in_vines(self):
         left = (self.x + 1) // 40
@@ -186,6 +214,15 @@ class player:
             self.vy = -12
             self.jumps += 1
 
+    def spider_webs(self):
+        if self.is_on_wall("u", True):
+            self.speed = 3
+        else:
+            try:
+                self.speed = self.start_speed
+            except:
+                pass
+
     def update_vy(self):
         Or = True
         block = "B"
@@ -194,6 +231,10 @@ class player:
 
         if self.vy > 12:
             self.vy = 12
+
+        if self.is_on_wall("u", True):
+            if self.vy > 3:
+                self.vy = 3
 
         if self.is_on_wall("P", True) == False:
             self.y += self.vy
@@ -629,7 +670,13 @@ class player:
                 abs(enemy.y - self.y) <= explosion_radius):
                 enemy.take_damage(damage)
                 print(f"Enemy at ({enemy.x}, {enemy.y}) took {damage} damage from explosion!")
-        
+
+        for y in range(len(self.level)):
+            for x in range(len(self.level[y])):
+                if (abs(x*40 - self.x) <= explosion_radius and 
+                abs(y*40 - self.y) <= explosion_radius):
+                    self.level[y][x] = "."
+
         # Optionally, you can also affect the environment (e.g., destroy blocks)
         # This part can be implemented based on your game's mechanics
     
@@ -653,6 +700,9 @@ class Pirate(player):
         # Start with a basic sword using item system
         self.inventory['weapon'].append("Sword +1")
         self.inventory['weapon'].append("Flame Thrower")
+        self.inventory['weapon'].append("Alchemist's Satchel")
+        for i in range(5):
+            self.inventory['item'].append("Bomb")
         self.equipped['weapon'] = "Sword +1"
         self.base_speed = 7
         self.speed = 7
@@ -681,7 +731,7 @@ class Pirate(player):
                 self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=7, level=self.level, attack_type=attack_type)
         self.current_super.super = True
     
-    def update_attacks(self, holding_attack, holding_super_attack, extraa):
+    def update_attacks(self, holding_attack, holding_super_attack, extraa, enemies):
         if not holding_attack:
             self.current_attack = None
         if not holding_super_attack:
@@ -692,6 +742,11 @@ class Pirate(player):
             if self.current_attack.attack_type == "ranged":
                 self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
                 a = self.current_attack.move()
+            elif self.current_attack.attack_type == "bombs":
+                self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
+                a = self.current_attack.move()
+                if a:
+                    self.current_attack.trigger_explosion(enemies)
             elif self.current_attack.attack_type == "Stab":
                 attack_x = self.x - self.current_attack.size_width if self.going_left else self.x + self.width
                 a = self.current_attack.move(attack_x, self.y + self.hight // 2, self.x, self.y)
@@ -757,7 +812,7 @@ class Knight(player):
                 self.current_super = weapon((10,0), player_x=(self.x+20), player_y=(self.y+20), size_width=40, size_hight=40, level=self.level, attack_type=attack_type)
         self.current_super.super = True
     
-    def update_attacks(self, holding_attack, holding_super_attack, extraa):
+    def update_attacks(self, holding_attack, holding_super_attack, extraa, enemies):
         if not holding_attack:
             self.current_attack = None
         if not holding_super_attack:
@@ -769,6 +824,11 @@ class Knight(player):
                 if self.ticks - self.last_attacked_at == 1:
                     self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
                 a = self.current_attack.move()
+            elif self.current_attack.attack_type == "bombs":
+                self.current_attack.velocity = (10, 0) if not self.going_left else (-10, 0)
+                a = self.current_attack.move()
+                if a:
+                    self.current_attack.trigger_explosion(enemies)
             elif self.current_attack.attack_type == "Stab":
                 attack_x = self.x - self.current_attack.size_width if self.going_left else self.x + self.width
                 if not self.going_left:
@@ -818,6 +878,9 @@ class weapon:
             else:
                 raise Exception("Please make both moveto_x and moveto_y either integers of both 'None'")
         elif self.attack_type == "ranged":
+            self.x += self.velocity[0]
+            self.y += self.velocity[1]
+        elif self.attack_type == "bombs":
             self.x += self.velocity[0]
             self.y += self.velocity[1]
         elif self.attack_type == "fire":
@@ -880,6 +943,35 @@ class weapon:
                 self.expired = True
                 return True
         return False
+
+    def trigger_explosion(self, enemies):
+        """Trigger a randomly selected bomb effect"""
+        bomb_type = random.choice(["normal", "lava", "dart"])
+        if bomb_type == "normal":
+            radius = 160
+            damage = 3
+        elif bomb_type == "lava":
+            radius = 120
+            damage = 1
+        else:
+            radius = 40
+            damage = 5
+
+        for enemy in enemies:
+            if (abs(enemy.x - self.x) <= radius and
+                    abs(enemy.y - self.y) <= radius):
+                enemy.take_damage(damage)
+
+        for y in range(len(self.level)):
+            for x in range(len(self.level[y])):
+                if (abs(x * 40 - self.x) <= radius and
+                        abs(y * 40 - self.y) <= radius):
+                    if bomb_type == "normal" and self.level[y][x] in ("B", "b"):
+                        self.level[y][x] = "."
+                    elif bomb_type == "lava" and self.level[y][x] == ".":
+                        self.level[y][x] = "L7"
+                    elif bomb_type == "dart":
+                        self.level[y][x] = "."
     
     def touching(self, block):
         try:
@@ -889,11 +981,26 @@ class weapon:
                 return True
             if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
                 return True
-            if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
+            if self.level[self.y // 40][(self.x + self.size_width) // 40] == block:
                 return True
             return False
         except IndexError:
             return True
+
+    def touching_block(self, block):
+        try:
+            if self.level[self.y // 40][self.x // 40] == block:
+                return (self.y // 40, self.x // 40)
+            if self.level[(self.y + self.size_hight) // 40][self.x // 40] == block:
+                return (self.y // 40 + self.size_hight // 40, self.x // 40)
+            if self.level[(self.y + self.size_hight) // 40][(self.x + self.size_width) // 40] == block:
+                return (self.y + self.size_hight // 40, self.x + self.size_width // 40)
+            if self.level[self.y // 40][(self.x + self.size_width) // 40] == block:
+                return (self.y // 40, self.x + self.size_width // 40)
+            return False
+        except IndexError:
+            return True
+
 
 
         
