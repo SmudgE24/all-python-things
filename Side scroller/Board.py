@@ -5,8 +5,6 @@ Created on Wed Jul  1 14:25:27 2026
 
 @author: ethanbrown
 """
-from sympy import python
-
 import Enemies
 import Items
 import random

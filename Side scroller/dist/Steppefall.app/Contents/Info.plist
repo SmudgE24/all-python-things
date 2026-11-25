@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Steppefall</string>
+	<key>CFBundleExecutable</key>
+	<string>Steppefall</string>
+	<key>CFBundleIconFile</key>
+	<string>generated-d540f887f25e7a348b807e08b2fcb2b87ec2d3e7bd3a0a35806c087f664f1211.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>Steppefall</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Steppefall</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
