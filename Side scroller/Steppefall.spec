@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['Main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('*.json', '.')],
+    datas=[('assets', 'assets'), ('settings.json', '.'), ('texts.json', '.'), ('world_save.json', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -46,6 +46,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='Steppefall.app',
-    icon='assets/images/cover.png',
+    icon=None,
     bundle_identifier=None,
 )
