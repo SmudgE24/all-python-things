@@ -21,11 +21,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r "Side scroller/requirements.txt"
+          python -m pip install Pillow
+
+      - name: Create Windows icon
+        working-directory: Side scroller
+        run: |
+          python -c "from PIL import Image; Image.open('assets/images/cover.png').convert('RGBA').save('assets/images/cover.ico', format='ICO', sizes=[(256,256)])"
 
       - name: Build Steppefall
         working-directory: Side scroller
         run: |
-          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --add-data "assets;assets" --add-data "settings.json;." --add-data "texts.json;." --add-data "world_save.json;." Main.py
+          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --icon "assets/images/cover.ico" --add-data "assets;assets" --add-data "settings.json;." --add-data "texts.json;." --add-data "world_save.json;." Main.py
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
