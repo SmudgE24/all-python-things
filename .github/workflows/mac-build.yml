@@ -26,7 +26,7 @@ jobs:
       - name: Build Steppefall
         working-directory: Side scroller
         run: |
-          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --icon "assets/images/cover.png" --add-data "assets:assets" --add-data "settings.json:." --add-data "texts.json:." --add-data "world_save.json:." Main.py
+          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --icon "assets/images/Cover.png" --add-data "assets:assets" --add-data "settings.json:." --add-data "texts.json:." --add-data "world_save.json:." Main.py
 
       - name: Upload Mac build
         uses: actions/upload-artifact@v4

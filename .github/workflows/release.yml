@@ -42,7 +42,7 @@ jobs:
         uses: remarkablegames/setup-butler@v3
 
       - name: Publish Mac test build
-        run: butler push "Side scroller/dist/Steppefall.app" steppefall/steppefall:macos-test
+        run: butler push "Side scroller/dist/Steppefall.app" steppefall/steppefall:osx
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
 
@@ -84,6 +84,6 @@ jobs:
         uses: remarkablegames/setup-butler@v3
 
       - name: Publish Windows test build
-        run: butler push "Side scroller/dist/Steppefall" steppefall/steppefall:windows-test
+        run: butler push "Side scroller/dist/Steppefall" steppefall/steppefall:windows
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
