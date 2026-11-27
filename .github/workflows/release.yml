@@ -20,17 +20,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install pillow
           python -m pip install -r "Side scroller/requirements.txt"
-
-      - name: Create Mac icon
-        working-directory: Side scroller
-        run: |
-          sips -s format icns assets/images/cover.png --out assets/images/cover.icns
 
       - name: Build Mac version
         working-directory: Side scroller
         run: |
-          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --icon "assets/images/cover.icns" --add-data "assets:assets" --add-data "settings.json:." --add-data "texts.json:." --add-data "world_save.json:." Main.py
+          pyinstaller --noconfirm --clean --name "Steppefall" --windowed --icon "assets/images/Cover.png" --add-data "assets:assets" --add-data "settings.json:." --add-data "texts.json:." --add-data "world_save.json:." Main.py
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
